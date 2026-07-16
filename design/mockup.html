@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colloquy — Debate Stage (Design Mockup)</title>
+<style>
+
+/* ============================================================
+   COLLOQUY — "Reading Room" theme
+   Design source of truth. Static HTML/CSS, one trivial JS hook
+   for the presentation-mode preview toggle only.
+   ============================================================ */
+
+:root{
+  /* backgrounds */
+  --bg-masthead:#E7DEC7;
+  --bg-page:#F1EBDC;
+  --bg-header:#F6F1E4;
+  --bg-surface:#FBF8F0;
+  --bg-surface-alt:#ECE3CE;
+  --bg-sunken:#E5DCC4;
+  --bg-scrim:rgba(33,28,21,.45);
+
+  /* rules */
+  --rule-hairline:#DBCFAF;
+  --rule-strong:#C7B78D;
+  --rule-spine:#D4C6A2;
+
+  /* ink */
+  --ink-primary:#211C15;
+  --ink-secondary:#56503F;
+  --ink-tertiary:#857C63;
+  --ink-placeholder:#A89C7C;
+  --ink-inverse:#F7F1E2;
+
+  /* agent A — oxblood */
+  --agentA-700:#5B1B26;
+  --agentA-600:#7B2432;
+  --agentA-500:#96313F;
+  --agentA-200:#E4C2C0;
+  --agentA-100:#F3E1DE;
+  --agentA-glow:rgba(123,36,50,.38);
+
+  /* agent B — ink navy */
+  --agentB-700:#172A42;
+  --agentB-600:#21395A;
+  --agentB-500:#2E4A70;
+  --agentB-200:#C1CCDA;
+  --agentB-100:#E2E7EE;
+  --agentB-glow:rgba(33,57,90,.38);
+
+  /* semantic states */
+  --state-live:#A6551E;
+  --state-live-700:#7C4015;
+  --state-live-bg:#F4E3D2;
+
+  --state-paused:#6B6350;
+  --state-paused-700:#4F4938;
+  --state-paused-bg:#EAE2CC;
+
+  --state-finished:#3E5D45;
+  --state-finished-700:#2E4635;
+  --state-finished-bg:#E1E8DC;
+
+  --state-error:#9C3B2E;
+  --state-error-700:#7A2E22;
+  --state-error-bg:#F5E1DA;
+  --state-error-border:#DDAB9B;
+
+  --focus-ring:#A6551E;
+
+  /* fonts */
+  --font-serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Consolas,Menlo,monospace;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg-page);
+  color:var(--ink-primary);
+  font-family:var(--font-sans);
+  -webkit-font-smoothing:antialiased;
+}
+img,svg{display:block;}
+button{font:inherit;}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;}
+
+/* ------------------------------------------------------------
+   Viewer harness (NOT part of the product — scaffolding for
+   reviewing this static mockup file only)
+   ------------------------------------------------------------ */
+.harness{
+  background:#2B2621;
+  color:#D8D0BE;
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  line-height:1.6;
+  padding:14px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  border-bottom:3px dashed #56503F;
+}
+.harness b{color:#F1EBDC;letter-spacing:.03em;}
+.harness .pres-toggle{
+  font-family:var(--font-sans);
+  font-weight:600;
+  font-size:12.5px;
+  background:#F1EBDC;
+  color:#2B2621;
+  border:none;
+  border-radius:3px;
+  padding:8px 14px;
+  cursor:pointer;
+}
+.harness .pres-toggle:hover{background:#fff;}
+
+.section-divider{
+  background:#2B2621;
+  color:#EDE6D6;
+  text-align:center;
+  padding:16px 24px;
+  font-family:var(--font-sans);
+  font-weight:700;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-top:56px;
+}
+.section-divider .sub{
+  display:block;
+  font-weight:400;
+  text-transform:none;
+  letter-spacing:.02em;
+  font-size:11.5px;
+  color:#B4AC98;
+  margin-top:6px;
+  font-family:var(--font-mono);
+}
+
+/* ============================================================
+   APP SHELL — the actual product surface
+   ============================================================ */
+#app-shell{max-width:1280px;margin:0 auto;background:var(--bg-page);}
+
+/* ---------- Masthead ---------- */
+.masthead{
+  height:34px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 32px;
+  background:var(--bg-masthead);
+  border-bottom:1px solid var(--rule-strong);
+}
+.wordmark{font-family:var(--font-sans);font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--ink-primary);}
+.masthead-meta{font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);}
+
+/* ---------- Stage header ---------- */
+.stage-header{
+  display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:20px;
+  padding:18px 32px;
+  background:var(--bg-header);
+  border-bottom:1px solid var(--rule-hairline);
+}
+.paper-kicker{font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-tertiary);margin:0 0 4px;}
+.paper-title{font-family:var(--font-serif);font-weight:700;font-size:25px;line-height:1.25;color:var(--ink-primary);margin:0;max-width:56ch;}
+.header-right{display:flex;align-items:center;gap:18px;}
+.round-indicator{text-align:right;}
+.round-label{font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-tertiary);display:block;}
+.round-value{font-family:var(--font-serif);font-weight:600;font-size:17px;color:var(--ink-primary);display:block;}
+
+.state-pill{
+  font-family:var(--font-sans);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;
+  padding:6px 12px;border-radius:3px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
+}
+.state-pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.state-pill.live{background:var(--state-live-bg);color:var(--state-live-700);}
+.state-pill.live .dot{animation:pulseDot 1.4s ease-in-out infinite;}
+.state-pill.paused{background:var(--state-paused-bg);color:var(--state-paused-700);}
+.state-pill.finished{background:var(--state-finished-bg);color:var(--state-finished-700);}
+.state-pill.error{background:var(--state-error-bg);color:var(--state-error-700);}
+.state-pill.idle{background:transparent;color:var(--ink-tertiary);border:1px solid var(--rule-hairline);}
+
+@keyframes pulseDot{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+/* ---------- Round progress ticks ---------- */
+.round-ticks{display:flex;gap:6px;align-items:center;padding:10px 32px;background:var(--bg-page);}
+.tick{width:30px;height:6px;border-radius:2px;background:var(--rule-strong);opacity:.5;}
+.tick.done{background:var(--ink-primary);opacity:1;}
+.tick.current{background:var(--state-live);opacity:1;animation:pulseTick 1.6s ease-in-out infinite;}
+@keyframes pulseTick{0%,100%{opacity:1;}50%{opacity:.5;}}
+
+/* ---------- Playbill / combatants strip ---------- */
+.playbill{
+  position:relative;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:24px;
+  padding:22px 32px;background:var(--bg-surface-alt);border-bottom:1px solid var(--rule-hairline);
+}
+.playbill-side{display:flex;gap:14px;align-items:flex-start;max-width:44%;}
+.playbill-side.b{flex-direction:row-reverse;text-align:right;}
+.combatant-name{font-family:var(--font-sans);font-weight:700;font-size:17px;color:var(--ink-primary);margin:0;}
+.combatant-meta{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-secondary);margin:2px 0 6px;}
+.combatant-stance{font-family:var(--font-serif);font-style:italic;font-size:14px;color:var(--ink-secondary);line-height:1.4;margin:0;}
+.vs-medallion{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:42px;height:42px;border-radius:50%;
+  background:var(--bg-page);border:1px solid var(--rule-strong);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-serif);font-style:italic;font-size:13px;color:var(--ink-tertiary);
+}
+
+/* ---------- Crest marks (shape + color, non-color-only identity) ---------- */
+.crest{width:28px;height:28px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-serif);font-weight:700;font-size:12.5px;color:var(--ink-inverse);}
+.crest-a{background:var(--agentA-600);transform:rotate(45deg);}
+.crest-a .crest-letter{display:block;transform:rotate(-45deg);}
+.crest-b{background:var(--agentB-600);border-radius:50%;}
+.crest.sm{width:22px;height:22px;font-size:10.5px;}
+
+/* ---------- Transcript ---------- */
+.transcript{position:relative;max-width:1120px;margin:0 auto;padding:32px;}
+.spine{position:absolute;left:50%;top:32px;bottom:32px;width:1px;background:var(--rule-spine);z-index:0;}
+
+.stmt-row{position:relative;z-index:1;display:flex;margin-bottom:28px;}
+.stmt-row.agentA{justify-content:flex-start;padding-right:12%;}
+.stmt-row.agentB{justify-content:flex-end;padding-left:12%;}
+
+.stmt{
+  width:min(520px,100%);
+  background:var(--bg-surface);
+  border:1px solid var(--rule-hairline);
+  box-shadow:0 1px 2px rgba(33,28,21,.06), 0 4px 10px rgba(33,28,21,.04);
+  position:relative;
+}
+.stmt::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;z-index:1;}
+.stmt.agentA{clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px);}
+.stmt.agentA::before{background:var(--agentA-600);}
+.stmt.agentB{clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%);}
+.stmt.agentB::before{background:var(--agentB-600);}
+
+.stmt-meta{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--rule-hairline);flex-wrap:wrap;}
+.stmt-name{font-family:var(--font-sans);font-weight:700;font-size:15.5px;color:var(--ink-primary);}
+.stmt-sep{color:var(--ink-tertiary);font-size:12px;}
+.stmt-provider{font-family:var(--font-sans);font-weight:500;font-size:12.5px;color:var(--ink-secondary);}
+.stmt-model{font-family:var(--font-mono);font-weight:500;font-size:12.5px;color:var(--ink-secondary);}
+.stmt-meta-right{margin-left:auto;display:flex;align-items:center;gap:10px;font-family:var(--font-sans);font-size:12px;color:var(--ink-tertiary);}
+
+.live-tag{display:inline-flex;align-items:center;gap:5px;background:var(--state-live-bg);color:var(--state-live-700);
+  font-weight:700;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:3px;}
+.live-tag .live-dot{width:6px;height:6px;border-radius:50%;background:var(--state-live);animation:pulseDot 1.4s ease-in-out infinite;}
+
+.stmt-body{padding:18px 20px 20px;font-family:var(--font-serif);font-size:19px;line-height:1.62;color:var(--ink-primary);max-width:62ch;}
+
+/* streaming state */
+.stmt.is-live .crest-a{animation:glowA 1.8s ease-in-out infinite;}
+.stmt.is-live .crest-b{animation:glowB 1.8s ease-in-out infinite;}
+@keyframes glowA{0%,100%{box-shadow:0 0 0 0 var(--agentA-glow);}50%{box-shadow:0 0 0 6px rgba(123,36,50,0);}}
+@keyframes glowB{0%,100%{box-shadow:0 0 0 0 var(--agentB-glow);}50%{box-shadow:0 0 0 6px rgba(33,57,90,0);}}
+.caret{display:inline-block;width:2px;height:1.05em;background:var(--ink-primary);vertical-align:-0.15em;margin-left:2px;animation:blink 1s step-start infinite;}
+@keyframes blink{50%{opacity:0;}}
+
+/* between-turns divider */
+.between-turns{position:relative;z-index:1;text-align:center;padding:0 0 26px;font-family:var(--font-serif);font-style:italic;font-size:13px;color:var(--ink-tertiary);letter-spacing:.02em;}
+.between-turns .dots{display:inline-flex;gap:3px;margin-left:6px;}
+.between-turns .dots span{width:3px;height:3px;border-radius:50%;background:var(--ink-tertiary);display:inline-block;animation:dotPulse 1.4s ease-in-out infinite;opacity:.3;}
+.between-turns .dots span:nth-child(2){animation-delay:.2s;}
+.between-turns .dots span:nth-child(3){animation-delay:.4s;}
+@keyframes dotPulse{0%,100%{opacity:.25;}50%{opacity:1;}}
+
+/* ---------- Controls bar ---------- */
+.controls-bar{
+  position:sticky;bottom:0;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  padding:14px 32px;background:var(--bg-surface-alt);border-top:1px solid var(--rule-hairline);
+}
+.controls-group{display:flex;align-items:center;gap:14px;}
+.control{display:inline-flex;flex-direction:column;align-items:center;gap:3px;}
+.kbd-hint{font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);letter-spacing:.02em;}
+.control-divider{width:1px;align-self:stretch;background:var(--rule-hairline);margin:0 2px;}
+
+.btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-sans);font-weight:600;font-size:13.5px;
+  padding:10px 16px;border-radius:3px;border:1px solid transparent;cursor:pointer;line-height:1;}
+.btn svg{width:16px;height:16px;}
+.btn-primary{background:var(--ink-primary);color:var(--ink-inverse);border-color:var(--ink-primary);}
+.btn-primary:hover{background:#38312A;}
+.btn-secondary{background:transparent;color:var(--ink-primary);border-color:var(--rule-strong);}
+.btn-secondary:hover{background:var(--bg-sunken);}
+.btn-secondary:disabled{color:var(--ink-tertiary);border-color:var(--rule-hairline);cursor:not-allowed;}
+.btn-quiet{background:transparent;color:var(--state-error-700);border:none;padding:10px 6px;text-decoration:none;}
+.btn-quiet:hover{text-decoration:underline;}
+
+/* ============================================================
+   PRESENTATION MODE PREVIEW (toggle via harness button)
+   ============================================================ */
+#app-shell.presentation-preview .masthead,
+#app-shell.presentation-preview .kbd-hint{display:none;}
+#app-shell.presentation-preview .paper-title{font-size:34px;}
+#app-shell.presentation-preview .round-label{font-size:13px;}
+#app-shell.presentation-preview .round-value{font-size:21px;}
+#app-shell.presentation-preview .state-pill{font-size:14px;padding:8px 14px;}
+#app-shell.presentation-preview .combatant-name{font-size:20px;}
+#app-shell.presentation-preview .combatant-stance{font-size:17px;}
+#app-shell.presentation-preview .stmt-name{font-size:18px;}
+#app-shell.presentation-preview .stmt-provider,
+#app-shell.presentation-preview .stmt-model{font-size:15px;}
+#app-shell.presentation-preview .stmt-meta-right{font-size:14px;}
+#app-shell.presentation-preview .stmt-body{font-size:28px;line-height:1.55;}
+#app-shell.presentation-preview .stmt-row.agentA{padding-right:6%;}
+#app-shell.presentation-preview .stmt-row.agentB{padding-left:6%;}
+#app-shell.presentation-preview .controls-bar{opacity:.2;transition:opacity .2s ease;}
+#app-shell.presentation-preview .controls-bar:hover{opacity:1;}
+#app-shell.presentation-preview::after{
+  content:"Presentation mode — chrome fades until the mouse moves; type scale steps up. (Hover the controls bar to simulate mouse movement.)";
+  display:block;text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--ink-tertiary);
+  padding:8px 32px;background:var(--bg-page);border-top:1px dashed var(--rule-strong);
+}
+
+/* ============================================================
+   Component & state reference section
+   ============================================================ */
+.ref-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:32px;
+  padding:40px 32px;max-width:1280px;margin:0 auto;background:var(--bg-page);
+}
+.ref-item{min-width:0;}
+.ref-caption{font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-tertiary);margin:0 0 12px;}
+.ref-stage{background:var(--bg-page);border:1px solid var(--rule-hairline);padding:20px;}
+
+.pill-row{display:flex;flex-wrap:wrap;gap:10px;}
+
+.jump-pill{display:inline-flex;align-items:center;gap:8px;background:var(--ink-primary);color:var(--ink-inverse);
+  padding:10px 18px;border-radius:999px;font-family:var(--font-sans);font-weight:600;font-size:13px;
+  box-shadow:0 6px 16px rgba(33,28,21,.22);}
+.jump-pill svg{width:14px;height:14px;}
+
+.error-banner{background:var(--bg-surface);border:1px solid var(--state-error-border);border-left:4px solid var(--state-error);
+  padding:16px 18px;display:flex;gap:14px;}
+.error-icon{color:var(--state-error);flex:0 0 auto;margin-top:1px;}
+.error-title{font-family:var(--font-sans);font-weight:700;font-size:14px;color:var(--ink-primary);margin:0 0 4px;}
+.error-copy{font-family:var(--font-sans);font-size:13.5px;color:var(--ink-secondary);line-height:1.5;margin:0 0 12px;}
+.error-actions{display:flex;gap:10px;}
+.error-actions .btn{padding:7px 12px;font-size:12.5px;}
+
+.finished-block{text-align:center;padding:12px 0 4px;}
+.finished-rule{display:flex;align-items:center;gap:14px;}
+.finished-rule::before,.finished-rule::after{content:"";flex:1;height:1px;background:var(--rule-strong);}
+.finished-diamond{width:10px;height:10px;background:var(--ink-tertiary);transform:rotate(45deg);flex:0 0 auto;}
+.finished-label{font-family:var(--font-serif);font-variant:small-caps;letter-spacing:.04em;color:var(--ink-secondary);font-size:14px;margin-top:10px;}
+
+.mini-card{background:var(--bg-surface);border:1px solid var(--rule-hairline);position:relative;padding:16px 18px;}
+.mini-card.invalid{border-color:var(--state-error-border);}
+.mini-field{margin-bottom:10px;}
+.mini-label{display:block;font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-secondary);margin-bottom:5px;}
+.mini-input, select.mini-input{width:100%;background:var(--bg-sunken);border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px;font-family:var(--font-sans);font-size:13.5px;color:var(--ink-primary);}
+.mini-input:disabled{color:var(--ink-tertiary);background:var(--bg-page);cursor:not-allowed;}
+.mini-note{font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);margin-top:5px;}
+.mini-note.error{color:var(--state-error-700);}
+
+/* ============================================================
+   Setup view (compact rendering)
+   ============================================================ */
+.setup-shell{max-width:1120px;margin:0 auto;padding:40px 32px 64px;background:var(--bg-page);}
+.setup-section{margin-bottom:36px;}
+.setup-heading{font-family:var(--font-serif);font-weight:700;font-size:19px;color:var(--ink-primary);margin:0 0 16px;}
+.field-label{display:block;font-family:var(--font-sans);font-weight:700;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-secondary);margin-bottom:8px;}
+.field{margin-bottom:20px;}
+.field:last-child{margin-bottom:0;}
+input[type=text].field-input, textarea.field-input, select.field-input{
+  width:100%;background:var(--bg-sunken);border:1px solid var(--rule-strong);border-radius:3px;
+  padding:11px 13px;font-family:var(--font-sans);font-size:15.5px;color:var(--ink-primary);
+}
+textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.5;min-height:190px;resize:vertical;}
+.field-input::placeholder{color:var(--ink-placeholder);}
+.field-hint{font-family:var(--font-sans);font-size:12px;color:var(--ink-tertiary);margin-top:6px;}
+
+.load-file-btn{margin-top:10px;}
+
+.agent-cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+.agent-card{background:var(--bg-surface);border:1px solid var(--rule-hairline);position:relative;}
+.agent-card::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;}
+.agent-card.a::before{background:var(--agentA-600);}
+.agent-card.b::before{background:var(--agentB-600);}
+.agent-card-body{padding:22px;}
+.agent-card-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.agent-card-head .role{font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-tertiary);}
+
+.settings-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;}
+.segmented{display:flex;border:1px solid var(--rule-strong);border-radius:3px;overflow:hidden;}
+.segmented button{flex:1;padding:10px 6px;background:var(--bg-sunken);border:none;border-left:1px solid var(--rule-strong);
+  font-family:var(--font-sans);font-size:13px;color:var(--ink-secondary);cursor:pointer;}
+.segmented button:first-child{border-left:none;}
+.segmented button.active{background:var(--ink-primary);color:var(--ink-inverse);}
+
+.begin-row{display:flex;justify-content:flex-end;align-items:center;gap:14px;margin-top:36px;padding-top:24px;border-top:1px solid var(--rule-hairline);}
+.begin-note{font-family:var(--font-sans);font-size:12.5px;color:var(--ink-tertiary);margin-right:auto;}
+.btn-begin{padding:15px 30px;font-size:16px;letter-spacing:.02em;}
+
+@media (max-width:760px){
+  .agent-cards-grid, .settings-grid{grid-template-columns:1fr;}
+  .stmt-row.agentA, .stmt-row.agentB{padding-left:0;padding-right:0;}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     VIEWER HARNESS — reviewing aid only, not part of the product
+     ============================================================ -->
+<div class="harness">
+  <span><b>COLLOQUY — DESIGN MOCKUP</b> · static reference, "Reading Room" theme · everything below the dashed line is real app chrome</span>
+  <button class="pres-toggle" onclick="document.getElementById('app-shell').classList.toggle('presentation-preview')">Toggle presentation-mode preview</button>
+</div>
+
+<!-- ============================================================
+     DEBATE STAGE — the main event
+     ============================================================ -->
+<div id="app-shell">
+
+  <div class="masthead">
+    <span class="wordmark">COLLOQUY</span>
+    <span class="masthead-meta">Rm 214 · Section 3B · Instructor console hidden on projector output</span>
+  </div>
+
+  <header class="stage-header">
+    <div>
+      <p class="paper-kicker">Paper under debate</p>
+      <h1 class="paper-title">Emergent Coordination in Decentralized Multi-Agent Systems: A Reproducibility Study</h1>
+    </div>
+    <div class="header-right">
+      <div class="round-indicator">
+        <span class="round-label">Round</span>
+        <span class="round-value">2 of 4</span>
+      </div>
+      <span class="state-pill live"><span class="dot"></span>Live</span>
+    </div>
+  </header>
+
+  <div class="round-ticks" aria-label="Round progress">
+    <span class="tick done"></span>
+    <span class="tick current"></span>
+    <span class="tick"></span>
+    <span class="tick"></span>
+  </div>
+
+  <section class="playbill">
+    <div class="playbill-side a">
+      <span class="crest crest-a"><span class="crest-letter">C</span></span>
+      <div>
+        <p class="combatant-name">Claude</p>
+        <p class="combatant-meta">Claude · claude-opus-4-8</p>
+        <p class="combatant-stance">"The reproducibility claims in §4 are overstated."</p>
+      </div>
+    </div>
+    <span class="vs-medallion">vs</span>
+    <div class="playbill-side b">
+      <span class="crest crest-b">G</span>
+      <div>
+        <p class="combatant-name">Gemini</p>
+        <p class="combatant-meta">Gemini · gemini-2.5-pro</p>
+        <p class="combatant-stance">"The methodology holds up under reasonable scrutiny."</p>
+      </div>
+    </div>
+  </section>
+
+  <main class="transcript">
+    <div class="spine"></div>
+
+    <div class="stmt-row agentA">
+      <article class="stmt agentA">
+        <div class="stmt-meta">
+          <span class="crest crest-a sm"><span class="crest-letter">C</span></span>
+          <span class="stmt-name">Claude</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-provider">Claude</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-model">claude-opus-4-8</span>
+          <span class="stmt-meta-right">Turn 1</span>
+        </div>
+        <div class="stmt-body">
+          Let's start with what the paper actually claims in Section 4.2: an 89% coordination-success rate across five reruns of the warehouse-routing scenario. But Table 3 only reports the mean — there's no variance, no seed list, and the appendix code doesn't fix the random seed at all. An 89% mean over five runs with unlisted seeds isn't a reproducibility result, it's a single lucky afternoon. Before we can debate whether the coordination mechanism itself is sound, I want to know whether anyone else could get this number twice.
+        </div>
+      </article>
+    </div>
+
+    <div class="stmt-row agentB">
+      <article class="stmt agentB">
+        <div class="stmt-meta">
+          <span class="crest crest-b sm">G</span>
+          <span class="stmt-name">Gemini</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-provider">Gemini</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-model">gemini-2.5-pro</span>
+          <span class="stmt-meta-right">Turn 1</span>
+        </div>
+        <div class="stmt-body">
+          That's a fair complaint about the write-up, but it's not a complaint about the method. The authors released the training checkpoints and the environment config — I ran the eval script myself against checkpoint <code>run-4.pt</code> and landed at 87.6%, well within noise of their reported 89%. The absence of a seed list is sloppy reporting, sure, but sloppy reporting and an irreproducible result are two different failures, and only one of them is fatal to the paper's contribution.
+        </div>
+      </article>
+    </div>
+
+    <div class="stmt-row agentA">
+      <article class="stmt agentA">
+        <div class="stmt-meta">
+          <span class="crest crest-a sm"><span class="crest-letter">C</span></span>
+          <span class="stmt-name">Claude</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-provider">Claude</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-model">claude-opus-4-8</span>
+          <span class="stmt-meta-right">Turn 2</span>
+        </div>
+        <div class="stmt-body">
+          One successful eval against one checkpoint doesn't establish variance either — you've replicated their point estimate, not their claim of stability "across initializations," which is the actual sentence in §4.2 I'm objecting to. If they mean 89% is stable, show me five checkpoints, not one. Until then the headline number is doing more rhetorical work than the evidence supports, even if the mechanism underneath — the auction-based task allocator in §3 — is probably fine.
+        </div>
+      </article>
+    </div>
+
+    <div class="stmt-row agentB">
+      <article class="stmt agentB is-live">
+        <div class="stmt-meta">
+          <span class="crest crest-b sm">G</span>
+          <span class="stmt-name">Gemini</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-provider">Gemini</span>
+          <span class="stmt-sep">·</span>
+          <span class="stmt-model">gemini-2.5-pro</span>
+          <span class="stmt-meta-right">
+            <span class="live-tag"><span class="live-dot"></span>Live</span>
+            Turn 2
+          </span>
+        </div>
+        <div class="stmt-body">
+          Granted — and that's a reasonable ask, so let's separate the two claims cleanly. On the allocator itself, §3.4's ablation is the stronger evidence: removing the bid-decay term drops coordination success by 22 points on the same task family, which is a controlled, same-seed comparison and doesn't depend on the cross-run variance question at all. So even if we discount the 89% headline number entirely, the paper still shows the mechanism is doing real work — the<span class="caret"></span>
+        </div>
+      </article>
+    </div>
+
+  </main>
+
+  <footer class="controls-bar">
+    <div class="controls-group">
+      <div class="control">
+        <button class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="4" height="14"></rect><rect x="14" y="5" width="4" height="14"></rect></svg>
+          Pause
+        </button>
+        <span class="kbd-hint">Space</span>
+      </div>
+      <div class="control">
+        <button class="btn btn-secondary" disabled title="Auto-advance is on">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"></path><path d="M15 5l8 7-8 7z"></path></svg>
+          Next turn
+        </button>
+        <span class="kbd-hint">N · auto-advance on</span>
+      </div>
+      <div class="control-divider"></div>
+      <button class="btn btn-quiet">End debate</button>
+    </div>
+    <div class="controls-group">
+      <div class="control">
+        <button class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="M7 11l5 5 5-5"></path><path d="M5 19h14"></path></svg>
+          Download transcript
+        </button>
+      </div>
+      <div class="control">
+        <button class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4"></path><path d="M20 9V5a1 1 0 0 1-1-1h-4"></path><path d="M4 15v4a1 1 0 0 0 1 1h4"></path><path d="M20 15v4a1 1 0 0 0-1 1h-4"></path></svg>
+          Presentation mode
+        </button>
+        <span class="kbd-hint">F</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ============================================================
+     COMPONENT & STATE REFERENCE — not part of the live stage;
+     shows states not otherwise visible in the stage snapshot above
+     ============================================================ -->
+<div class="section-divider">
+  Component &amp; state reference
+  <span class="sub">everything in this band is a swatch, not a screen — for the states table in DESIGN_SPEC.md §5</span>
+</div>
+
+<div class="ref-grid">
+
+  <div class="ref-item">
+    <p class="ref-caption">Header state pill — all states</p>
+    <div class="ref-stage pill-row">
+      <span class="state-pill idle">Ready</span>
+      <span class="state-pill live"><span class="dot"></span>Live</span>
+      <span class="state-pill paused">Paused</span>
+      <span class="state-pill finished">Finished</span>
+      <span class="state-pill error">Error</span>
+    </div>
+  </div>
+
+  <div class="ref-item">
+    <p class="ref-caption">Between-turns divider</p>
+    <div class="ref-stage">
+      <div class="between-turns">Round 3 · Claude preparing to respond<span class="dots"><span></span><span></span><span></span></span></div>
+    </div>
+  </div>
+
+  <div class="ref-item">
+    <p class="ref-caption">"Jump to live" pill (appears when scrolled off the live edge)</p>
+    <div class="ref-stage" style="display:flex;justify-content:center;">
+      <span class="jump-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M6 13l6 6 6-6"></path></svg>Jump to live</span>
+    </div>
+  </div>
+
+  <div class="ref-item">
+    <p class="ref-caption">Error banner (inline, replaces the turn — calm, not alarming)</p>
+    <div class="ref-stage">
+      <div class="error-banner">
+        <span class="error-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19z"></path><path d="M12 9.5v4.2"></path><circle cx="12" cy="16.8" r="0.9" fill="currentColor" stroke="none"></circle></svg>
+        </span>
+        <div>
+          <p class="error-title">Gemini (gemini-2.5-pro) didn't respond</p>
+          <p class="error-copy">The request timed out after 30s. This is usually transient — retry the turn, or skip it and let Claude continue.</p>
+          <div class="error-actions">
+            <button class="btn btn-primary">Retry turn</button>
+            <button class="btn btn-quiet">Skip turn</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ref-item">
+    <p class="ref-caption">Finished treatment (after the last statement)</p>
+    <div class="ref-stage">
+      <div class="finished-block">
+        <div class="finished-rule"><span class="finished-diamond"></span></div>
+        <p class="finished-label">Debate concluded — 4 rounds, 8 statements</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="ref-item">
+    <p class="ref-caption">Controls bar — manual mode, awaiting instructor</p>
+    <div class="ref-stage">
+      <footer class="controls-bar" style="position:static;padding:12px 16px;">
+        <div class="controls-group">
+          <button class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"></path></svg>
+            Resume
+          </button>
+          <button class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"></path><path d="M15 5l8 7-8 7z"></path></svg>
+            Next turn
+          </button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <div class="ref-item">
+    <p class="ref-caption">Agent card — provider unavailable (setup view)</p>
+    <div class="ref-stage">
+      <div class="mini-card">
+        <div class="mini-field">
+          <span class="mini-label">Provider</span>
+          <select class="mini-input" disabled><option>ChatGPT — no API key configured</option></select>
+          <p class="mini-note">Add an API key in settings to enable this provider.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ref-item">
+    <p class="ref-caption">Agent card — invalid field (setup view)</p>
+    <div class="ref-stage">
+      <div class="mini-card invalid">
+        <div class="mini-field" style="margin-bottom:0;">
+          <span class="mini-label">Model</span>
+          <input class="mini-input" style="border-color:var(--state-error);" value="">
+          <p class="mini-note error">Model name can't be empty.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     SETUP VIEW (compact rendering)
+     ============================================================ -->
+<div class="section-divider">
+  Setup view
+  <span class="sub">configure a debate — instructor-only screen, never projected</span>
+</div>
+
+<div class="setup-shell">
+
+  <section class="setup-section">
+    <h2 class="setup-heading">The paper</h2>
+    <div class="field">
+      <label class="field-label">Title</label>
+      <input class="field-input" type="text" value="Emergent Coordination in Decentralized Multi-Agent Systems: A Reproducibility Study">
+    </div>
+    <div class="field">
+      <label class="field-label">Paper text</label>
+      <textarea class="field-input">Abstract. We study whether coordination behavior learned by independent reinforcement-learning agents generalizes across random initialization and environment perturbation. Across a warehouse-routing benchmark, our auction-based allocator achieves an 89% task-completion rate averaged over five runs (Table 3), a 14-point improvement over the strongest decentralized baseline...</textarea>
+      <div class="load-file-btn">
+        <button class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 18v-6"></path><path d="M9 15l3-3 3 3"></path></svg>
+          Load .txt / .md file
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="setup-section">
+    <h2 class="setup-heading">The combatants</h2>
+    <div class="agent-cards-grid">
+
+      <div class="agent-card a">
+        <div class="agent-card-body">
+          <div class="agent-card-head">
+            <span class="crest crest-a"><span class="crest-letter">C</span></span>
+            <span class="role">Agent A · left, projected</span>
+          </div>
+          <div class="field">
+            <label class="field-label">Display name</label>
+            <input class="field-input" type="text" value="Claude">
+          </div>
+          <div class="field">
+            <label class="field-label">Provider</label>
+            <select class="field-input">
+              <option>Claude</option>
+              <option>ChatGPT — no API key</option>
+              <option>Gemini</option>
+              <option>Mock (offline demo)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label">Model</label>
+            <input class="field-input" type="text" value="claude-opus-4-8" style="font-family:var(--font-mono);font-size:14px;">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="field-label">Stance</label>
+            <select class="field-input" style="margin-bottom:8px;">
+              <option>Skeptical of methodology</option>
+              <option>Defends methodology</option>
+              <option>Neutral moderator</option>
+              <option>Custom…</option>
+            </select>
+            <input class="field-input" type="text" value="The reproducibility claims in §4 are overstated.">
+          </div>
+        </div>
+      </div>
+
+      <div class="agent-card b">
+        <div class="agent-card-body">
+          <div class="agent-card-head">
+            <span class="crest crest-b">G</span>
+            <span class="role">Agent B · right, projected</span>
+          </div>
+          <div class="field">
+            <label class="field-label">Display name</label>
+            <input class="field-input" type="text" value="Gemini">
+          </div>
+          <div class="field">
+            <label class="field-label">Provider</label>
+            <select class="field-input">
+              <option>Gemini</option>
+              <option>Claude</option>
+              <option>ChatGPT — no API key</option>
+              <option>Mock (offline demo)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label">Model</label>
+            <input class="field-input" type="text" value="gemini-2.5-pro" style="font-family:var(--font-mono);font-size:14px;">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="field-label">Stance</label>
+            <select class="field-input" style="margin-bottom:8px;">
+              <option>Defends methodology</option>
+              <option>Skeptical of methodology</option>
+              <option>Neutral moderator</option>
+              <option>Custom…</option>
+            </select>
+            <input class="field-input" type="text" value="The methodology holds up under reasonable scrutiny.">
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="setup-section">
+    <h2 class="setup-heading">Debate settings</h2>
+    <div class="settings-grid">
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-label">Speaking turns</label>
+        <select class="field-input">
+          <option>6 turns</option>
+          <option selected>8 turns</option>
+          <option>10 turns</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-label">Advance mode</label>
+        <div class="segmented">
+          <button class="active">Auto-advance</button>
+          <button>Manual — Next turn</button>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-label">Response length target</label>
+        <div class="segmented">
+          <button>Brief</button>
+          <button class="active">Standard</button>
+          <button>Extended</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="begin-row">
+    <span class="begin-note">8 turns · auto-advance · standard length</span>
+    <button class="btn btn-primary btn-begin">Begin debate →</button>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colloquy</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============================================================
+     SETUP VIEW — instructor-only screen, never projected
+     ============================================================ -->
+<div id="setup-view">
+  <div class="masthead">
+    <span class="wordmark">COLLOQUY</span>
+    <span class="masthead-meta">Configure a debate</span>
+  </div>
+
+  <form class="setup-shell" id="setup-form" novalidate>
+
+    <div id="setup-error" class="error-banner setup-error-banner hidden">
+      <span class="error-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19z"></path><path d="M12 9.5v4.2"></path><circle cx="12" cy="16.8" r="0.9" fill="currentColor" stroke="none"></circle></svg>
+      </span>
+      <div>
+        <p class="error-title">Couldn't start the debate</p>
+        <p class="error-copy" id="setup-error-copy"></p>
+      </div>
+    </div>
+
+    <section class="setup-section">
+      <h2 class="setup-heading">The paper</h2>
+      <div class="field">
+        <label class="field-label" for="paper-title">Title</label>
+        <input class="field-input" type="text" id="paper-title" placeholder="e.g. Emergent Coordination in Decentralized Multi-Agent Systems">
+      </div>
+      <div class="field">
+        <label class="field-label" for="paper-text">Paper text</label>
+        <textarea class="field-input" id="paper-text" placeholder="Paste the abstract, or the full paper text, here..."></textarea>
+        <p class="field-error hidden" id="paper-text-error">Paper text can't be empty.</p>
+        <div class="load-file-row">
+          <button type="button" class="btn btn-secondary" id="load-file-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 18v-6"></path><path d="M9 15l3-3 3 3"></path></svg>
+            Load .txt / .md file
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="setup-section">
+      <h2 class="setup-heading">The combatants</h2>
+      <div class="agent-cards-grid">
+
+        <div class="agent-card a" id="agent-card-a">
+          <div class="agent-card-body">
+            <div class="agent-card-head">
+              <span class="crest crest-a"><span class="crest-letter" id="crest-a-letter">A</span></span>
+              <span class="role">Agent A · left, projected</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="agentA-name">Display name</label>
+              <input class="field-input" type="text" id="agentA-name" value="Claude">
+            </div>
+            <div class="field">
+              <label class="field-label" for="agentA-provider">Provider</label>
+              <select class="field-input" id="agentA-provider"></select>
+              <p class="field-hint hidden" id="agentA-provider-hint">Add an API key in <code>.env</code> to enable this provider.</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="agentA-model">Model</label>
+              <input class="field-input" type="text" id="agentA-model" style="font-family:var(--font-mono);font-size:14px;">
+              <p class="field-error hidden" id="agentA-model-error">Model name can't be empty.</p>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label class="field-label" for="agentA-stance-preset">Stance</label>
+              <select class="field-input" id="agentA-stance-preset" style="margin-bottom:8px;"></select>
+              <input class="field-input hidden" type="text" id="agentA-stance-custom" placeholder="Describe this agent's assigned analytical stance...">
+            </div>
+          </div>
+        </div>
+
+        <div class="agent-card b" id="agent-card-b">
+          <div class="agent-card-body">
+            <div class="agent-card-head">
+              <span class="crest crest-b" id="crest-b-letter">B</span>
+              <span class="role">Agent B · right, projected</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="agentB-name">Display name</label>
+              <input class="field-input" type="text" id="agentB-name" value="Gemini">
+            </div>
+            <div class="field">
+              <label class="field-label" for="agentB-provider">Provider</label>
+              <select class="field-input" id="agentB-provider"></select>
+              <p class="field-hint hidden" id="agentB-provider-hint">Add an API key in <code>.env</code> to enable this provider.</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="agentB-model">Model</label>
+              <input class="field-input" type="text" id="agentB-model" style="font-family:var(--font-mono);font-size:14px;">
+              <p class="field-error hidden" id="agentB-model-error">Model name can't be empty.</p>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label class="field-label" for="agentB-stance-preset">Stance</label>
+              <select class="field-input" id="agentB-stance-preset" style="margin-bottom:8px;"></select>
+              <input class="field-input hidden" type="text" id="agentB-stance-custom" placeholder="Describe this agent's assigned analytical stance...">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="setup-section">
+      <h2 class="setup-heading">Debate settings</h2>
+      <div class="settings-grid">
+        <div class="field" style="margin-bottom:0;">
+          <label class="field-label" for="turns-select">Speaking turns</label>
+          <select class="field-input" id="turns-select">
+            <option value="4">4 turns</option>
+            <option value="6">6 turns</option>
+            <option value="8" selected>8 turns</option>
+            <option value="10">10 turns</option>
+            <option value="12">12 turns</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label class="field-label">Advance mode</label>
+          <div class="segmented" id="advance-mode-segmented">
+            <button type="button" class="active" data-value="auto">Auto-advance</button>
+            <button type="button" data-value="manual">Manual — Next turn</button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label class="field-label">Response length target</label>
+          <div class="segmented" id="length-segmented">
+            <button type="button" data-value="90">Brief</button>
+            <button type="button" class="active" data-value="160">Standard</button>
+            <button type="button" data-value="260">Extended</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="begin-row">
+      <span class="begin-note" id="begin-note">8 turns · auto-advance · standard length</span>
+      <button type="submit" class="btn btn-primary btn-begin" id="begin-btn">Begin debate →</button>
+    </div>
+
+  </form>
+</div>
+
+<!-- ============================================================
+     DEBATE STAGE — the live/projected view
+     ============================================================ -->
+<div id="stage-view" class="hidden">
+  <div id="app-shell">
+
+    <div class="masthead">
+      <span class="wordmark">COLLOQUY</span>
+      <span class="masthead-meta">Instructor console hidden on projector output</span>
+    </div>
+
+    <header class="stage-header">
+      <div>
+        <p class="paper-kicker">Paper under debate</p>
+        <h1 class="paper-title" id="stage-paper-title"></h1>
+      </div>
+      <div class="header-right">
+        <div class="round-indicator">
+          <span class="round-label">Round</span>
+          <span class="round-value" id="round-value">— of —</span>
+        </div>
+        <span class="state-pill idle" id="state-pill">Ready</span>
+      </div>
+    </header>
+
+    <div class="round-ticks" id="round-ticks" aria-label="Round progress"></div>
+
+    <section class="playbill" id="playbill"></section>
+
+    <main class="transcript" id="transcript">
+      <div class="spine"></div>
+      <div id="transcript-body"></div>
+    </main>
+
+    <footer class="controls-bar" id="controls-bar">
+      <div class="controls-group">
+        <div class="control">
+          <button class="btn btn-primary" id="start-pause-btn" type="button">Start</button>
+          <span class="kbd-hint">Space</span>
+        </div>
+        <div class="control">
+          <button class="btn btn-secondary" id="next-btn" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"></path><path d="M15 5l8 7-8 7z"></path></svg>
+            Next turn
+          </button>
+          <span class="kbd-hint" id="next-kbd-hint">N</span>
+        </div>
+        <div class="control-divider"></div>
+        <button class="btn btn-quiet" id="end-btn" type="button">End debate</button>
+      </div>
+      <div class="controls-group">
+        <div class="control">
+          <button class="btn btn-secondary" id="download-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="M7 11l5 5 5-5"></path><path d="M5 19h14"></path></svg>
+            Download transcript
+          </button>
+        </div>
+        <div class="control">
+          <button class="btn btn-secondary" id="presentation-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4"></path><path d="M20 9V5a1 1 0 0 1-1-1h-4"></path><path d="M4 15v4a1 1 0 0 0 1 1h4"></path><path d="M20 15v4a1 1 0 0 0-1 1h-4"></path></svg>
+            Presentation mode
+          </button>
+          <span class="kbd-hint">F</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<button class="jump-pill" id="jump-pill" type="button">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M6 13l6 6 6-6"></path></svg>
+  Jump to live
+</button>
+
+<input type="file" id="file-input" accept=".txt,.md,text/plain,text/markdown" class="hidden">
+
+<script src="app.js"></script>
+</body>
+</html>

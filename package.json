@@ -1,0 +1,20 @@
+{
+  "name": "colloquy",
+  "version": "1.0.0",
+  "description": "Colloquy — a live, semi-adversarial LLM debate app for classrooms",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@google/genai": "^2.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "openai": "^6.45.0"
+  }
+}
