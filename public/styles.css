@@ -317,6 +317,11 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
    ============================================================ */
 #app-shell.presentation .masthead,
 #app-shell.presentation .kbd-hint{display:none;}
+/* Fill the full visible width when presenting (drop the reading-room caps). */
+#app-shell.presentation{max-width:none;}
+#app-shell.presentation .transcript{max-width:none;padding-left:5%;padding-right:5%;}
+#app-shell.presentation .stmt{width:min(78%,100%);}
+#app-shell.presentation .stmt-body{max-width:none;}
 #app-shell.presentation .paper-title{font-size:34px;}
 #app-shell.presentation .round-label{font-size:13px;}
 #app-shell.presentation .round-value{font-size:21px;}
