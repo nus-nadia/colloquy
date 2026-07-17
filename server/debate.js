@@ -2,12 +2,29 @@
 
 import { randomUUID } from 'node:crypto';
 import { getProvider } from './providers/index.js';
-import { buildSystemPrompt, openingModeratorMessage, finalRoundModeratorNote } from './prompts.js';
+import { buildSystemPrompt, openingModeratorMessage, finalRoundModeratorNote, moderatorInterjection } from './prompts.js';
 
 const AUTO_ADVANCE_PAUSE_MS = 1500;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Join consecutive same-role messages with a blank line between them.
+// A moderator entry sitting between two agent turns reconstructs as a
+// `user` message next to the opponent's `user` message; Anthropic's API
+// requires strict user/assistant alternation, so merge before sending.
+function mergeConsecutiveRoles(messages) {
+  const merged = [];
+  for (const message of messages) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === message.role) {
+      last.content = `${last.content}\n\n${message.content}`;
+    } else {
+      merged.push({ ...message });
+    }
+  }
+  return merged;
 }
 
 // Rough words-per-statement -> max_tokens budget. Generous enough that
@@ -83,17 +100,25 @@ export class DebateSession {
       messages.push({ role: 'user', content: openingModeratorMessage({ opponentName }) });
     }
     for (const entry of this.transcript) {
-      messages.push({
-        role: entry.agentIndex === speakerIndex ? 'assistant' : 'user',
-        content: entry.text,
-      });
+      if (entry.type === 'moderator') {
+        messages.push({ role: 'user', content: moderatorInterjection(entry.text) });
+      } else {
+        messages.push({
+          role: entry.agentIndex === speakerIndex ? 'assistant' : 'user',
+          content: entry.text,
+        });
+      }
     }
+    // Merge first so a moderator note between two agent turns doesn't
+    // leave two consecutive user messages, then append the final-round
+    // note to the last message of the merged (alternating) array.
+    const merged = mergeConsecutiveRoles(messages);
     const isFinalRound = turnIndex >= 1 && turnIndex >= this.config.maxTurns - 2;
     if (isFinalRound) {
-      const last = messages[messages.length - 1];
+      const last = merged[merged.length - 1];
       last.content = `${last.content}\n\n${finalRoundModeratorNote()}`;
     }
-    return messages;
+    return merged;
   }
 
   // ---------- turn loop ----------
@@ -172,7 +197,8 @@ export class DebateSession {
   _finish() {
     this.state = 'finished';
     this.broadcastState();
-    this.broadcast('done', { turns: this.transcript.length });
+    // Count agent statements only — moderator notes must not inflate it.
+    this.broadcast('done', { turns: this.turn });
   }
 
   _runAutoLoop() {
@@ -229,6 +255,53 @@ export class DebateSession {
     this._finish();
   }
 
+  // ---------- moderation ----------
+
+  // Server twin of the frontend's moderation gate: moderation is only
+  // legal while no turn is streaming and the debate isn't auto-running.
+  // The auto-running check closes the race during the AUTO_ADVANCE_PAUSE_MS
+  // sleep, when turnInFlight is momentarily false between turns.
+  canModerate() {
+    if (this.turnInFlight) return { ok: false, reason: 'turn-in-flight' };
+    if (this.state === 'finished') return { ok: false, reason: 'finished' };
+    if (this.state === 'running' && this.config.autoAdvance) return { ok: false, reason: 'auto-running' };
+    return { ok: true };
+  }
+
+  editStatement(turnIndex, text) {
+    const gate = this.canModerate();
+    if (!gate.ok) return gate;
+    const entry = this.transcript.find((e) => e.type !== 'moderator' && e.turn === turnIndex);
+    if (!entry) return { ok: false, reason: 'unknown-turn' };
+    const trimmed = String(text).trim();
+    if (!trimmed) return { ok: false, reason: 'empty-text' };
+    if (trimmed !== entry.text) {
+      entry.text = trimmed;
+      entry.editedAt = Date.now();
+    }
+    this.broadcast('entry_edited', entry);
+    return { ok: true, entry };
+  }
+
+  injectModerator(text, afterTurn) {
+    const gate = this.canModerate();
+    if (!gate.ok) return gate;
+    const trimmed = String(text).trim();
+    if (!trimmed) return { ok: false, reason: 'empty-text' };
+    const at = Number.isInteger(afterTurn) ? afterTurn : this.turn - 1;
+    if (at < 0 || at >= this.turn) return { ok: false, reason: 'invalid-after-turn' };
+    const entry = { type: 'moderator', id: randomUUID(), afterTurn: at, text: trimmed, createdAt: Date.now() };
+    // Insert after the last entry chronologically at or before `at`, so
+    // multiple notes on the same turn stack in creation order and a
+    // retroactive note lands mid-array rather than at the end.
+    const lastIdx = this.transcript.findLastIndex(
+      (e) => (e.type !== 'moderator' && e.turn <= at) || (e.type === 'moderator' && e.afterTurn <= at),
+    );
+    this.transcript.splice(lastIdx + 1, 0, entry);
+    this.broadcast('moderator_added', entry);
+    return { ok: true, entry };
+  }
+
   // ---------- export ----------
 
   exportMarkdown() {
@@ -241,8 +314,13 @@ export class DebateSession {
     });
     lines.push('');
     for (const entry of this.transcript) {
-      const agent = agents[entry.agentIndex];
-      lines.push(`### Turn ${entry.turn + 1} — ${agent.name} (${entry.provider} · ${entry.model})`);
+      if (entry.type === 'moderator') {
+        lines.push(`### Moderator — after turn ${entry.afterTurn + 1}`);
+      } else {
+        const agent = agents[entry.agentIndex];
+        const edited = entry.editedAt ? ' *(edited)*' : '';
+        lines.push(`### Turn ${entry.turn + 1} — ${agent.name} (${entry.provider} · ${entry.model})${edited}`);
+      }
       lines.push('');
       lines.push(entry.text);
       lines.push('');

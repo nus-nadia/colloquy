@@ -230,6 +230,51 @@ button{font:inherit;}
 .finished-diamond{width:10px;height:10px;background:var(--ink-tertiary);transform:rotate(45deg);flex:0 0 auto;}
 .finished-label{font-family:var(--font-serif);font-variant:small-caps;letter-spacing:.04em;color:var(--ink-secondary);font-size:14px;margin-top:10px;}
 
+/* ---------- Moderation ---------- */
+/* Per-statement edit / note affordances — quiet sans, hidden until the debate
+   is in a moderatable state (mirrors the server's canModerate gate). */
+.mod-action{
+  display:none;
+  font-family:var(--font-sans);font-weight:600;font-size:12px;letter-spacing:.02em;
+  color:var(--ink-tertiary);background:transparent;border:none;cursor:pointer;padding:2px 4px;
+}
+.mod-action:hover{color:var(--ink-primary);text-decoration:underline;}
+#app-shell.can-moderate:not(.presentation) .mod-action{display:inline-flex;}
+#app-shell.presentation .mod-action,
+#app-shell.presentation #mod-inject{display:none !important;}
+
+.edited-tag{
+  font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);
+  border:1px solid var(--rule-hairline);border-radius:2px;padding:1px 6px;
+}
+
+/* Moderator entries: neutral ink, centered on the spine — agent hues and the
+   clipped corner are reserved agent-identity channels (spec §1-2). */
+.stmt-row.moderator{justify-content:center;padding-left:0;padding-right:0;}
+.stmt.moderator{width:min(520px,100%);clip-path:none;}
+.stmt.moderator::before{background:var(--ink-secondary);}
+.stmt.moderator .mod-name{font-variant:small-caps;letter-spacing:.04em;}
+
+/* Shared moderation editor (edit-in-place, +Note, inject). */
+.mod-editor{width:100%;}
+.mod-textarea{
+  width:100%;min-height:120px;padding:12px;background:var(--bg-sunken);
+  border:1px solid var(--rule-strong);border-radius:3px;resize:vertical;
+  font-family:var(--font-serif);font-size:19px;line-height:1.62;color:var(--ink-primary);
+}
+.mod-editor-actions{display:flex;align-items:center;gap:10px;margin-top:10px;}
+.mod-editor-actions .btn{padding:7px 14px;font-size:12.5px;}
+.mod-editor-actions .btn-primary:disabled{background:var(--ink-tertiary);border-color:var(--ink-tertiary);cursor:not-allowed;}
+.mod-editor-error{font-family:var(--font-sans);font-size:12.5px;color:var(--state-error-700);margin:8px 0 0;}
+.mod-note-row .mod-editor,#mod-inject .mod-editor{width:min(520px,100%);}
+
+/* Collapsed inject affordance — reads like a between-turns stage direction. */
+.mod-inject-toggle{
+  background:transparent;border:none;cursor:pointer;padding:4px 8px;letter-spacing:.02em;
+  font-family:var(--font-serif);font-style:italic;font-size:14px;color:var(--ink-tertiary);
+}
+.mod-inject-toggle:hover{color:var(--ink-secondary);}
+
 /* ---------- Controls bar ---------- */
 .controls-bar{
   position:sticky;bottom:0;
@@ -321,6 +366,7 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 #app-shell.presentation{max-width:none;}
 #app-shell.presentation .transcript{max-width:none;padding-left:5%;padding-right:5%;}
 #app-shell.presentation .stmt{width:min(78%,100%);}
+#app-shell.presentation .stmt.moderator{width:min(56%,100%);} /* the .stmt rule above otherwise forces 78% */
 #app-shell.presentation .stmt-body{max-width:none;}
 #app-shell.presentation .paper-title{font-size:34px;}
 #app-shell.presentation .round-label{font-size:13px;}

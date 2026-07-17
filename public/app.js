@@ -66,6 +66,7 @@ const state = {
   lastError: null,
   pinnedToLive: true,
   presentation: false,
+  canModerate: false,
   eventSource: null,
 };
 
@@ -352,6 +353,8 @@ function connectSSE(id) {
   es.addEventListener('turn_end', (e) => onTurnEnd(JSON.parse(e.data)));
   es.addEventListener('state', (e) => onStateEvent(JSON.parse(e.data)));
   es.addEventListener('done', (e) => onDone(JSON.parse(e.data)));
+  es.addEventListener('entry_edited', (e) => onEntryEdited(JSON.parse(e.data)));
+  es.addEventListener('moderator_added', (e) => onModeratorAdded(JSON.parse(e.data)));
   // NOTE: EventSource's native connection-failure event is also named
   // "error" — the same name our server uses for a real debate-turn
   // error. Disambiguate via presence of `.data` (only server-sent
@@ -385,6 +388,7 @@ function onSnapshot(snap) {
 
 function onTurnStart(data) {
   removeBetweenTurnsDivider();
+  closeTransientEditors();
   state.liveTurn = { turn: data.turn, agentIndex: data.agentIndex, text: '' };
   state.pinnedToLive = true;
   hideJumpPill();
@@ -403,7 +407,7 @@ function onDelta(data) {
 }
 
 function onTurnEnd(entry) {
-  const idx = state.transcript.findIndex((t) => t.turn === entry.turn);
+  const idx = state.transcript.findIndex((t) => t.type !== 'moderator' && t.turn === entry.turn);
   if (idx === -1) state.transcript.push(entry); else state.transcript[idx] = entry;
   state.liveTurn = null;
   finalizeStatementRow(entry);
@@ -472,7 +476,7 @@ function renderPlaybill() {
 
 function updateRoundChrome() {
   const totalRounds = Math.max(1, Math.ceil(state.config.maxTurns / 2));
-  const completedTurns = state.transcript.length;
+  const completedTurns = state.transcript.filter((e) => e.type !== 'moderator').length;
   const liveTurnIdx = state.liveTurn ? state.liveTurn.turn : null;
   let currentRound;
   if (liveTurnIdx != null) currentRound = Math.floor(liveTurnIdx / 2) + 1;
@@ -523,11 +527,17 @@ function updateControlsUI() {
 
   const autoAdvance = Boolean(state.config && state.config.autoAdvance);
   const nextEnabled = !finished && !state.liveTurn && (!autoAdvance || state.sessionState === 'paused');
+  // The Next-turn predicate doubles as the moderation gate — moderation is
+  // legal exactly when a turn isn't streaming and the loop isn't auto-running
+  // (server twin: DebateSession.canModerate). Paused-with-error qualifies.
+  state.canModerate = nextEnabled;
+  appShell.classList.toggle('can-moderate', nextEnabled);
   nextBtn.disabled = !nextEnabled;
   nextBtn.title = autoAdvance && state.sessionState !== 'paused' ? 'Auto-advance is on' : '';
   nextKbdHint.textContent = autoAdvance ? 'N · auto-advance on' : 'N';
 
   endBtn.disabled = finished;
+  updateModeratorInjectUI();
 }
 
 function agentSideClass(agentIndex) {
@@ -556,6 +566,8 @@ function appendStatementRow(data) {
         <span class="stmt-meta-right">
           <span class="live-tag"><span class="live-dot"></span>Live</span>
           Turn ${Math.floor(data.turn / 2) + 1}
+          <button type="button" class="mod-action" data-mod-edit="${data.turn}">Edit</button>
+          <button type="button" class="mod-action" data-mod-note="${data.turn}">+ Note</button>
         </span>
       </div>
       <div class="stmt-body" id="stmt-body-${data.turn}"></div>
@@ -578,6 +590,7 @@ function finalizeStatementRow(entry) {
   }
   const bodyEl = document.getElementById(`stmt-body-${entry.turn}`);
   if (bodyEl) bodyEl.innerHTML = renderStatementHTML(entry.text);
+  if (entry.editedAt) ensureEditedTag(entry.turn);
 }
 
 function appendBetweenTurnsDividerIfMore(justFinishedTurn) {
@@ -641,8 +654,12 @@ function renderFinishedBlock(data) {
 function rebuildTranscriptFromScratch() {
   transcriptBody.innerHTML = '';
   for (const entry of state.transcript) {
-    appendStatementRow(entry);
-    finalizeStatementRow(entry);
+    if (entry.type === 'moderator') {
+      appendModeratorRow(entry);
+    } else {
+      appendStatementRow(entry);
+      finalizeStatementRow(entry);
+    }
   }
   if (state.liveTurn) {
     const agent = getAgentConfig(state.liveTurn.agentIndex);
@@ -657,9 +674,276 @@ function rebuildTranscriptFromScratch() {
     renderErrorBanner(state.lastError);
   }
   if (state.sessionState === 'finished') {
-    renderFinishedBlock({ turns: state.transcript.length });
+    renderFinishedBlock({ turns: state.transcript.filter((e) => e.type !== 'moderator').length });
   }
   scrollToBottom(false);
+}
+
+// ---------------------------------------------------------------
+// Moderation — edit-in-place, moderator notes, live-edge inject
+// ---------------------------------------------------------------
+
+// Shared editor for the three moderation surfaces (edit-in-place, the
+// per-statement "+ Note", and the live-edge inject row). `onSave(text)` runs
+// the request and resolves to an inline error string (shown under the
+// textarea) or a falsy value on success; the caller / SSE handler tears the
+// editor down once the change lands.
+function buildModEditor({ initialValue = '', saveLabel = 'Save', onSave, onCancel }) {
+  const el = document.createElement('div');
+  el.className = 'mod-editor';
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'mod-textarea';
+  textarea.value = initialValue; // property assignment — model/user text never reaches innerHTML here
+
+  const error = document.createElement('p');
+  error.className = 'mod-editor-error hidden';
+
+  const actions = document.createElement('div');
+  actions.className = 'mod-editor-actions';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'btn btn-primary';
+  saveBtn.textContent = saveLabel;
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn btn-quiet';
+  cancelBtn.textContent = 'Cancel';
+  actions.append(saveBtn, cancelBtn);
+
+  el.append(textarea, error, actions);
+
+  const syncSave = () => { saveBtn.disabled = !textarea.value.trim(); };
+  syncSave();
+  textarea.addEventListener('input', syncSave);
+
+  // Handle Escape locally so the global keydown handler never sees it and
+  // drops out of presentation mode. (The global guard already ignores keys
+  // while a TEXTAREA is focused, so N/Space/F stay safe automatically.)
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); onCancel(); }
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const text = textarea.value.trim();
+    if (!text) return;
+    saveBtn.disabled = true;
+    error.classList.add('hidden');
+    const message = await onSave(text);
+    if (message) {
+      error.textContent = message; // textContent — safe
+      error.classList.remove('hidden');
+      saveBtn.disabled = false;
+    }
+  });
+  cancelBtn.addEventListener('click', () => onCancel());
+
+  return { el, textarea };
+}
+
+function editErrorMessage(res) {
+  if (res.status === 409) return 'Debate advanced — try again while paused.';
+  if (res.status === 404) return 'This statement is no longer available.';
+  return "Couldn't save the edit — try again.";
+}
+
+function moderatorErrorMessage(res) {
+  if (res.status === 409) return 'Debate advanced — try again while paused.';
+  return "Couldn't add the note — try again.";
+}
+
+// One delegated listener — survives every transcript rebuild, no per-row wiring.
+transcriptBody.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('[data-mod-edit]');
+  if (editBtn) { openEditor(parseInt(editBtn.dataset.modEdit, 10)); return; }
+  const noteBtn = e.target.closest('[data-mod-note]');
+  if (noteBtn) openNoteEditor(parseInt(noteBtn.dataset.modNote, 10));
+});
+
+function openEditor(turn) {
+  const bodyEl = document.getElementById(`stmt-body-${turn}`);
+  const entry = state.transcript.find((t) => t.type !== 'moderator' && t.turn === turn);
+  if (!bodyEl || !entry) return;
+  const editor = buildModEditor({
+    initialValue: entry.text,
+    saveLabel: 'Save edit',
+    onSave: async (text) => {
+      const res = await fetch(`/api/debates/${state.debateId}/transcript/${turn}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      // Success: the entry_edited SSE re-renders this body, closing the editor.
+      return res.ok ? null : editErrorMessage(res);
+    },
+    onCancel: () => { bodyEl.innerHTML = renderStatementHTML(entry.text); },
+  });
+  bodyEl.innerHTML = '';
+  bodyEl.appendChild(editor.el);
+  editor.textarea.focus();
+}
+
+function openNoteEditor(turn) {
+  const stmtRow = document.getElementById(`turn-row-${turn}`);
+  if (!stmtRow) return;
+  const existing = document.getElementById(`mod-note-row-${turn}`);
+  if (existing) { existing.querySelector('.mod-textarea')?.focus(); return; }
+  const row = document.createElement('div');
+  row.className = 'stmt-row moderator mod-note-row';
+  row.id = `mod-note-row-${turn}`;
+  const editor = buildModEditor({
+    initialValue: '',
+    saveLabel: 'Add note',
+    onSave: async (text) => {
+      const res = await fetch(`/api/debates/${state.debateId}/moderator`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, afterTurn: turn }),
+      });
+      if (!res.ok) return moderatorErrorMessage(res);
+      row.remove(); // the moderator_added SSE inserts the rendered entry
+      return null;
+    },
+    onCancel: () => row.remove(),
+  });
+  row.appendChild(editor.el);
+  stmtRow.insertAdjacentElement('afterend', row);
+  editor.textarea.focus();
+}
+
+// Restore any open edit-in-place editors (discarding drafts) and drop
+// transient note editors — called when a new turn starts streaming.
+function closeTransientEditors() {
+  for (const body of transcriptBody.querySelectorAll('.stmt-body')) {
+    if (!body.querySelector('.mod-editor')) continue;
+    const turn = parseInt(body.id.replace('stmt-body-', ''), 10);
+    const entry = state.transcript.find((t) => t.type !== 'moderator' && t.turn === turn);
+    body.innerHTML = entry ? renderStatementHTML(entry.text) : '';
+  }
+  for (const noteRow of transcriptBody.querySelectorAll('.mod-note-row')) noteRow.remove();
+}
+
+function ensureEditedTag(turn) {
+  const article = document.getElementById(`stmt-${turn}`);
+  if (!article) return;
+  const metaRight = article.querySelector('.stmt-meta-right');
+  if (!metaRight || metaRight.querySelector('.edited-tag')) return;
+  const tag = document.createElement('span');
+  tag.className = 'edited-tag';
+  tag.title = 'Edited by moderator';
+  tag.textContent = 'edited';
+  const firstAction = metaRight.querySelector('.mod-action');
+  if (firstAction) metaRight.insertBefore(tag, firstAction);
+  else metaRight.appendChild(tag);
+}
+
+function buildModeratorRow(entry) {
+  const row = document.createElement('div');
+  row.className = 'stmt-row moderator';
+  row.id = `mod-row-${entry.id}`; // server UUID; property assignment per the existing row.id idiom
+  row.innerHTML = `
+    <article class="stmt moderator">
+      <div class="stmt-meta">
+        <span class="stmt-name mod-name">Moderator</span>
+        <span class="stmt-meta-right">after turn ${entry.afterTurn + 1}</span>
+      </div>
+      <div class="stmt-body"></div>
+    </article>`;
+  row.querySelector('.stmt-body').innerHTML = renderStatementHTML(entry.text);
+  return row;
+}
+
+function appendModeratorRow(entry) {
+  const row = buildModeratorRow(entry);
+  transcriptBody.appendChild(row);
+  return row;
+}
+
+function rowElementForEntry(entry) {
+  return entry.type === 'moderator'
+    ? document.getElementById(`mod-row-${entry.id}`)
+    : document.getElementById(`turn-row-${entry.turn}`);
+}
+
+function onEntryEdited(entry) {
+  const idx = state.transcript.findIndex((t) => t.type !== 'moderator' && t.turn === entry.turn);
+  if (idx === -1) state.transcript.push(entry); else state.transcript[idx] = entry;
+  const bodyEl = document.getElementById(`stmt-body-${entry.turn}`);
+  if (bodyEl) bodyEl.innerHTML = renderStatementHTML(entry.text); // replaces any open editor for this turn
+  if (entry.editedAt) ensureEditedTag(entry.turn);
+}
+
+function onModeratorAdded(entry) {
+  const at = entry.afterTurn;
+  // Mirror server/debate.js's findLastIndex insertion so array order matches.
+  const lastIdx = state.transcript.findLastIndex(
+    (e) => (e.type !== 'moderator' && e.turn <= at) || (e.type === 'moderator' && e.afterTurn <= at),
+  );
+  const insertIdx = lastIdx + 1;
+  state.transcript.splice(insertIdx, 0, entry);
+
+  const row = buildModeratorRow(entry);
+  const nextEntry = state.transcript[insertIdx + 1];
+  let anchor = nextEntry ? rowElementForEntry(nextEntry) : null;
+  if (!anchor) anchor = document.getElementById('between-turns-divider') || document.getElementById('mod-inject');
+  if (anchor) transcriptBody.insertBefore(row, anchor);
+  else transcriptBody.appendChild(row);
+
+  if (state.pinnedToLive && !nextEntry) scrollToBottom(false);
+}
+
+// The live-edge inject affordance, kept at the end of the transcript.
+// Deliberately independent of the between-turns divider's lifecycle so it
+// survives the paused-with-error state, where moderation is still legal.
+let injectExpanded = false;
+
+function updateModeratorInjectUI() {
+  const hasStatements = state.transcript.some((e) => e.type !== 'moderator');
+  const visible = state.canModerate && hasStatements && !state.presentation;
+  let row = document.getElementById('mod-inject');
+  if (!visible) {
+    if (row) row.remove();
+    injectExpanded = false;
+    return;
+  }
+  if (!row) {
+    row = document.createElement('div');
+    row.id = 'mod-inject';
+    row.className = 'stmt-row moderator';
+    renderModeratorInject(row);
+  }
+  transcriptBody.appendChild(row); // keep it at the live edge (moves an existing row without losing its draft)
+}
+
+function renderModeratorInject(row) {
+  row.innerHTML = '';
+  if (!injectExpanded) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'mod-inject-toggle';
+    toggle.textContent = '＋ Moderator note';
+    toggle.addEventListener('click', () => { injectExpanded = true; renderModeratorInject(row); });
+    row.appendChild(toggle);
+    return;
+  }
+  const editor = buildModEditor({
+    initialValue: '',
+    saveLabel: 'Add note',
+    onSave: async (text) => {
+      const res = await fetch(`/api/debates/${state.debateId}/moderator`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return moderatorErrorMessage(res);
+      injectExpanded = false;
+      renderModeratorInject(row); // collapse; the moderator_added SSE inserts the entry
+      return null;
+    },
+    onCancel: () => { injectExpanded = false; renderModeratorInject(row); },
+  });
+  row.appendChild(editor.el);
+  editor.textarea.focus();
 }
 
 // ---------------------------------------------------------------
@@ -753,6 +1037,7 @@ function togglePresentationMode(force) {
   const next = force !== undefined ? force : !state.presentation;
   state.presentation = next;
   appShell.classList.toggle('presentation', next);
+  updateModeratorInjectUI();
   if (next) {
     document.documentElement.requestFullscreen?.().catch(() => {});
     resetAutoHideTimer();
