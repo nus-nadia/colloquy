@@ -52,6 +52,7 @@ ${paper.text}
 
 DEBATE RULES:
 - Engage critically with both the paper and your opponent, ${opponentName}. This is a real debate, not a panel of agreement.
+- Use simple language when possible. Avoid unnecessary jargon.
 - Ground every major claim in the paper itself: cite specific sections, results, figures, or methodological choices.
 - When your opponent's argument has a weakness, name it directly and explain why it fails. Do not soften disagreement out of politeness.
 - Concede only when the evidence genuinely compels it — and then pivot to the strongest remaining ground for your stance.
