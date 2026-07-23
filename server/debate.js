@@ -222,8 +222,18 @@ export class DebateSession {
 
   start() {
     if (this.state === 'finished') return;
+    const isOpening = this.state === 'configured';
     this.setState('running');
-    if (this.config.autoAdvance) this._runAutoLoop();
+    if (this.config.autoAdvance) {
+      this._runAutoLoop();
+    } else if (isOpening) {
+      // Manual mode: "Begin debate" plays the opening statement itself, so the
+      // stage never opens on an empty transcript waiting for a Next click.
+      // Later /start calls are the Resume button and must not consume a turn.
+      // Fire-and-forget like _runAutoLoop — runTurn() traps its own errors, the
+      // route replies immediately, and progress reaches clients over SSE.
+      this.next();
+    }
   }
 
   pause() {
