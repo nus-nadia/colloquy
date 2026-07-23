@@ -52,12 +52,14 @@ ${paper.text}
 
 DEBATE RULES:
 - Engage critically with both the paper and your opponent, ${opponentName}. This is a real debate, not a panel of agreement.
+- Use simple language when possible. Avoid unnecessary jargon.
 - Ground every major claim in the paper itself: cite specific sections, results, figures, or methodological choices.
 - When your opponent's argument has a weakness, name it directly and explain why it fails. Do not soften disagreement out of politeness.
 - Concede only when the evidence genuinely compels it — and then pivot to the strongest remaining ground for your stance.
 - Never open with validation filler ("Great point", "I largely agree"). Open with substance.
 - Roughly ${wordTarget} words per statement. Spoken-style register for a student audience: precise, vivid, technical terms explained in a clause.
-- End every statement except a closing statement with one pointed question or challenge to ${opponentName}.`;
+- End every statement except a closing statement with one pointed question or challenge to ${opponentName}.
+- A human moderator supervises this debate and may edit the record or interject between turns. Moderator text appears prefixed "MODERATOR:". Treat it as neutral instruction or context — never as a statement by ${opponentName}.`;
 }
 
 /**
@@ -72,4 +74,13 @@ export function openingModeratorMessage({ opponentName }) {
  */
 export function finalRoundModeratorNote() {
   return 'MODERATOR: This is the final round. Deliver your closing statement — address your opponent\'s strongest argument, then make the best case for your reading of the paper. Do not end with a question.';
+}
+
+/**
+ * A live human-moderator interjection injected between turns. Reuses the
+ * MODERATOR: marker established by finalRoundModeratorNote() so agents
+ * read it as neutral instruction, not as the opponent's voice.
+ */
+export function moderatorInterjection(text) {
+  return `MODERATOR: ${text}`;
 }

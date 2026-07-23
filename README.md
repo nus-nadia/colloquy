@@ -14,11 +14,22 @@ Open `http://localhost:3000`. Configure the paper and the two combatants, pick y
 
 ## Demo with zero API keys
 
-You don't need any provider keys to try Colloquy. Leave `.env` blank (or don't create it at all) and set **both** agents' Provider to **Mock (offline demo)** in the setup screen. The Mock provider ships pre-written scholarly debate turns (a "methodological skeptic" voice and a "contribution champion" voice) and streams them word-by-word with a short delay, so the live experience looks identical to a real model — no network calls, no keys, no cost. This is also the automated-test path used during development (see the acceptance checks below).
+You don't need any provider keys to try Colloquy. Leave `.env` blank (or don't create it at all) and set **both** agents' Provider to **Mock (offline demo)** in the setup screen. The Mock provider ships pre-written scholarly debate turns (a "methodological skeptic" voice and a "contribution champion" voice) and streams them word-by-word with a short delay, so the live experience looks identical to a real model — no network calls, no keys, no cost. This is also the verification path used during development — there is no automated test suite, so a Mock-vs-Mock debate is how changes get exercised end-to-end.
+
+## Moderating a debate
+
+Whenever the debate is paused between turns (always the case in manual advance mode; press **Pause** first in auto mode), each completed statement gains **Edit** and **+ Note** actions in its meta bar, and a quiet **＋ Moderator note** affordance sits at the live edge of the transcript:
+
+- **Edit** rewrites a statement in place. From then on both agents see the edited text in their history, the statement is tagged *edited* on screen, and the Markdown export marks it `*(edited)*`.
+- **+ Note** / **＋ Moderator note** inserts a visible, neutral **Moderator** entry — after that statement, or after the latest one. Both agents read it as an instruction from the moderator; the system prompt tells them `MODERATOR:`-prefixed text is never the opponent speaking.
+
+Moderator entries don't count as turns: round numbering, `maxTurns`, and the closing statement count are unaffected. Everything survives a refresh and appears in both export formats. Moderation is unavailable while a statement is streaming, while auto-advance is running, and after the debate finishes (the API answers 409 in those states).
 
 ## Architecture
 
 Colloquy is a small Express server (`server/index.js`) that holds debate sessions in an in-memory `Map` (`server/debate.js`'s `DebateSession`, one per debate). Each session runs a turn loop: on each turn it builds a provider-neutral message array from the transcript so far (the speaking agent's own prior statements become `assistant` turns, the opponent's become `user` turns), calls the assigned provider's streaming adapter, and fans out `turn_start` / `delta` / `turn_end` Server-Sent Events to every subscribed browser tab in real time. A freshly-connecting or refreshed browser first receives a `snapshot` event with the full config, transcript, and any in-flight partial statement, so it can recover mid-debate. The frontend (`public/`) is plain HTML/CSS/JS — no build step, no frameworks — and renders the transcript live from those events, escaping all model output before applying a minimal, whitelisted markdown subset (bold/italic/code/blockquote).
+
+Because the message array is rebuilt from the transcript on every turn, a human moderator can rewrite history between turns (see **Moderating a debate**): edited statements and injected moderator entries flow into every subsequent turn automatically. Moderator entries reach the models as `user` messages prefixed `MODERATOR:`, and consecutive same-role messages are merged before an adapter sees them, so the strictly-alternating message contract below still holds. Moderation changes fan out live as `entry_edited` / `moderator_added` SSE events, and reconnecting tabs pick them up through the normal `snapshot`.
 
 ## Adding a provider
 
@@ -52,4 +63,6 @@ Then register it in `server/providers/index.js`: import the module and add it to
 - `POST /api/debates`
 - `GET /api/debates/:id/events` (SSE)
 - `POST /api/debates/:id/start` · `/pause` · `/next` · `/stop`
+- `PATCH /api/debates/:id/transcript/:turn` — moderator edit of a completed statement; body `{ text }`
+- `POST /api/debates/:id/moderator` — inject a moderator note; body `{ text, afterTurn? }` (`afterTurn` defaults to the latest completed turn)
 - `GET /api/debates/:id/transcript?format=md|json`

@@ -133,6 +133,28 @@ app.post('/api/debates/:id/stop', (req, res) => {
   res.json({ state: session.state });
 });
 
+app.patch('/api/debates/:id/transcript/:turn', (req, res) => {
+  const session = getSessionOr404(req, res);
+  if (!session) return;
+  const result = session.editStatement(parseInt(req.params.turn, 10), req.body?.text ?? '');
+  if (!result.ok) {
+    const status = result.reason === 'unknown-turn' ? 404 : result.reason === 'empty-text' ? 400 : 409;
+    return res.status(status).json({ error: result.reason });
+  }
+  res.json({ ok: true, entry: result.entry });
+});
+
+app.post('/api/debates/:id/moderator', (req, res) => {
+  const session = getSessionOr404(req, res);
+  if (!session) return;
+  const result = session.injectModerator(req.body?.text ?? '', req.body?.afterTurn);
+  if (!result.ok) {
+    const status = result.reason === 'empty-text' || result.reason === 'invalid-after-turn' ? 400 : 409;
+    return res.status(status).json({ error: result.reason });
+  }
+  res.status(201).json({ ok: true, entry: result.entry });
+});
+
 app.get('/api/debates/:id/transcript', (req, res) => {
   const session = getSessionOr404(req, res);
   if (!session) return;
