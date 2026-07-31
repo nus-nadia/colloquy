@@ -233,6 +233,17 @@ button{font:inherit;}
 .stmt-body th,.stmt-body td{border:1px solid var(--rule-hairline);padding:6px 10px;text-align:left;vertical-align:top;}
 .stmt-body th{background:var(--bg-surface-alt);font-weight:700;}
 
+/* KaTeX math. Its own stylesheet loads first (see index.html); these rules
+   pull it back onto the parchment theme. Note the deliberate exception to
+   "no web fonts" in DESIGN_SPEC §3 — math glyphs have no system-stack
+   equivalent, and the KaTeX faces are vendored locally, not fetched. */
+.stmt-body .katex{font-size:1.05em;}
+/* Long equations scroll inside the 62ch column instead of widening it.
+   The vertical padding keeps tall fractions/integrals off the scrollbar. */
+.stmt-body .katex-display{margin:0.55em 0 0.85em;padding:2px 0;overflow-x:auto;overflow-y:hidden;}
+.stmt-body .katex-display > .katex{font-size:1.12em;}
+.stmt-body .katex-error{color:var(--state-error);font-family:var(--font-mono);font-size:0.88em;}
+
 /* streaming state */
 .stmt.is-live .crest-a{animation:glowA 1.8s ease-in-out infinite;}
 .stmt.is-live .crest-b{animation:glowB 1.8s ease-in-out infinite;}

@@ -86,7 +86,7 @@ Contrast targets: body text on page/surface layers exceeds 12:1 (AAA). Agent hue
 
 ## 3. Typography
 
-No web fonts, no icon fonts. Three system stacks, used with intent:
+No web fonts, no icon fonts — with one exception, below. Three system stacks, used with intent:
 
 ```
 --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
@@ -97,6 +97,7 @@ No web fonts, no icon fonts. Three system stacks, used with intent:
 - **Serif** carries anything that *is* the debate: paper title, statement body, stance lines, the finished/paused ornament copy. It's what gives this a journal/manuscript character.
 - **Sans** carries UI chrome: labels, buttons, chips' agent-name, form fields, timestamps.
 - **Mono** is reserved for one thing only: model identifiers (`claude-opus-4-8`, `gemini-2.5-pro`), so they read as literal technical strings, not prose.
+- **Math** is the exception to "no web fonts": the KaTeX faces ship with the typesetter, because there is no system-stack equivalent for math glyphs — a `\sum` or a stretched radical rendered in Georgia is not the same character. They are vendored under `public/vendor/katex/fonts/` (woff2 only) and served from the app itself, so the no-network posture is intact. Rendered math sits at 1.05em against the serif body so it reads as the same size as the prose around it rather than KaTeX's default 1.21em; display blocks scroll horizontally inside the 62ch column instead of widening the statement.
 
 ### Type scale (Normal mode / Presentation mode)
 
