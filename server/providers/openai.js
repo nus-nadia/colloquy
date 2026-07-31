@@ -14,7 +14,7 @@ let client;
 export default {
   id: 'openai',
   label: 'ChatGPT (OpenAI)',
-  defaultModel: 'gpt-5',
+  defaultModel: 'gpt-5.6-luna',
 
   isConfigured() {
     return Boolean(process.env.OPENAI_API_KEY);
