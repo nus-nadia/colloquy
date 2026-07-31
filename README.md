@@ -60,6 +60,7 @@ Then register it in `server/providers/index.js`: import the module and add it to
 ## HTTP API
 
 - `GET /api/providers`
+- `GET /api/stances` — the `STANCE_PRESETS` list from `server/prompts.js`, used to build the setup form's stance dropdown
 - `POST /api/debates`
 - `GET /api/debates/:id/events` (SSE)
 - `POST /api/debates/:id/start` · `/pause` · `/next` · `/stop`

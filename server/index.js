@@ -5,6 +5,7 @@ import express from 'express';
 
 import { listProviders, getProvider } from './providers/index.js';
 import { DebateSession } from './debate.js';
+import { STANCE_PRESETS } from './prompts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -28,6 +29,12 @@ function getSessionOr404(req, res) {
 
 app.get('/api/providers', (req, res) => {
   res.json(listProviders());
+});
+
+// The frontend's stance dropdown is built from this, so prompts.js stays
+// the single source of truth for preset ids, labels, and stance text.
+app.get('/api/stances', (req, res) => {
+  res.json(STANCE_PRESETS);
 });
 
 app.post('/api/debates', (req, res) => {

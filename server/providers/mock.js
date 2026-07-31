@@ -65,8 +65,8 @@ function poolFor(system) {
   // "critically") for every stance, always picking the same pool.
   const match = (system || '').match(/your assigned analytical stance:\s*([^\n]+)/i);
   const stanceLine = (match ? match[1] : system || '').toLowerCase();
-  if (/\bskeptic|\bprobe|reproducib|generaliz|\bcritic\b|critique|\brisk|examiner|\bethic/.test(stanceLine)) return SKEPTIC_TURNS;
-  if (/champion|defend|advocate|adoption|contribution/.test(stanceLine)) return DEFENDER_TURNS;
+  if (/\bskeptic|\bprobe|reproducib|generaliz|\bcritic\b|criticiz|critique|advers|\brisk|examiner|\bethic/.test(stanceLine)) return SKEPTIC_TURNS;
+  if (/champion|defend|supporter|advocate|adoption|contribution/.test(stanceLine)) return DEFENDER_TURNS;
   // Fallback: deterministic split by system-prompt length so the same
   // agent always lands on the same pool for the life of the debate.
   return system && system.length % 2 === 0 ? SKEPTIC_TURNS : DEFENDER_TURNS;

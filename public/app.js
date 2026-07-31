@@ -1,17 +1,12 @@
 // Colloquy frontend — vanilla JS, no build step, no frameworks.
 'use strict';
 
-// Mirrors server/prompts.js STANCE_PRESETS. There is no dedicated API
-// route for these (the spec's HTTP API list doesn't include one), so
-// the six presets are duplicated here deliberately.
-const STANCE_PRESETS = [
-  { id: 'methodological-skeptic', label: 'Methodological skeptic', text: 'Methodological skeptic — probe validity, statistics, baselines, and experimental design' },
-  { id: 'contribution-champion', label: 'Champion of the contribution', text: 'Champion of the contribution — defend the significance, novelty, and rigor of the work' },
-  { id: 'reproducibility-critic', label: 'Reproducibility & generalization critic', text: 'Reproducibility & generalization critic — question robustness beyond the reported setting' },
-  { id: 'ethics-examiner', label: 'Ethics & societal impact examiner', text: 'Ethics & societal impact examiner — surface risks, externalities, and framing problems' },
-  { id: 'adoption-advocate', label: 'Practical adoption advocate', text: 'Practical adoption advocate — argue for real-world value and deployment readiness' },
-  { id: 'custom', label: 'Custom…', text: '' },
-];
+// Stance presets are fetched from GET /api/stances at startup, so
+// server/prompts.js is the single source of truth for ids, labels, and
+// stance text. CUSTOM_ONLY_STANCES is the degraded fallback if that
+// request fails: the free-text stance field alone still works.
+const CUSTOM_ONLY_STANCES = [{ id: 'custom', label: 'Custom…', text: '' }];
+let STANCE_PRESETS = CUSTOM_ONLY_STANCES;
 
 const WARNING_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19z"></path><path d="M12 9.5v4.2"></path><circle cx="12" cy="16.8" r="0.9" fill="currentColor" stroke="none"></circle></svg>';
 const PLAY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"></path></svg>';
@@ -507,6 +502,12 @@ const jumpPill = document.getElementById('jump-pill');
 // Setup view wiring
 // ---------------------------------------------------------------
 
+function stanceEls(prefix) {
+  return prefix === 'A'
+    ? { presetSelect: agentAStancePreset, customInput: agentAStanceCustom }
+    : { presetSelect: agentBStancePreset, customInput: agentBStanceCustom };
+}
+
 function populateStanceSelect(selectEl) {
   selectEl.innerHTML = '';
   for (const s of STANCE_PRESETS) {
@@ -517,22 +518,51 @@ function populateStanceSelect(selectEl) {
   }
 }
 
+// Select a preset by id and show/hide the free-text field to match. Used
+// both for the startup defaults and (via wireStanceSelect) on change, so
+// the two paths can never disagree about the custom field's visibility.
+function selectStance(prefix, id, { focusCustom = false } = {}) {
+  const { presetSelect, customInput } = stanceEls(prefix);
+  if (id !== undefined) presetSelect.value = id;
+  const isCustom = presetSelect.value === 'custom';
+  customInput.classList.toggle('hidden', !isCustom);
+  if (isCustom && focusCustom) customInput.focus();
+}
+
 function resolvedStance(prefix) {
-  const presetSelect = prefix === 'A' ? agentAStancePreset : agentBStancePreset;
-  const customInput = prefix === 'A' ? agentAStanceCustom : agentBStanceCustom;
+  const { presetSelect, customInput } = stanceEls(prefix);
   const preset = STANCE_PRESETS.find((s) => s.id === presetSelect.value);
   if (!preset || preset.id === 'custom') return customInput.value.trim();
   return preset.text;
 }
 
 function wireStanceSelect(prefix) {
-  const presetSelect = prefix === 'A' ? agentAStancePreset : agentBStancePreset;
-  const customInput = prefix === 'A' ? agentAStanceCustom : agentBStanceCustom;
+  const { presetSelect } = stanceEls(prefix);
   presetSelect.addEventListener('change', () => {
-    const isCustom = presetSelect.value === 'custom';
-    customInput.classList.toggle('hidden', !isCustom);
-    if (isCustom) customInput.focus();
+    selectStance(prefix, undefined, { focusCustom: true });
   });
+}
+
+// Agent A takes the first preset, Agent B the second, so the two sides
+// start opposed whatever prompts.js currently lists.
+async function loadStances() {
+  try {
+    const res = await fetch('/api/stances');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const presets = await res.json();
+    const usable = Array.isArray(presets)
+      ? presets.filter((s) => s && typeof s.id === 'string' && typeof s.label === 'string')
+      : [];
+    if (usable.length) STANCE_PRESETS = usable;
+  } catch (err) {
+    console.error('Could not load stance presets; falling back to custom only.', err);
+  }
+
+  populateStanceSelect(agentAStancePreset);
+  populateStanceSelect(agentBStancePreset);
+  const defaults = STANCE_PRESETS.filter((s) => s.id !== 'custom');
+  selectStance('A', (defaults[0] || STANCE_PRESETS[0]).id);
+  selectStance('B', (defaults[1] || defaults[0] || STANCE_PRESETS[0]).id);
 }
 
 function populateProviderSelect(selectEl, hintEl) {
@@ -1465,13 +1495,9 @@ document.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------
 
 (async function init() {
-  populateStanceSelect(agentAStancePreset);
-  populateStanceSelect(agentBStancePreset);
-  agentAStancePreset.value = 'methodological-skeptic';
-  agentBStancePreset.value = 'contribution-champion';
   updateBeginNote();
 
-  await loadProviders();
+  await Promise.all([loadStances(), loadProviders()]);
 
   const params = new URLSearchParams(location.search);
   const existingId = params.get('debate');
