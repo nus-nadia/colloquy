@@ -19,8 +19,17 @@ const PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 // ---------------------------------------------------------------
 // Safe markdown rendering: escape ALL HTML first, then apply only a
-// tiny whitelist of markup. This is the ONLY code path allowed to set
+// fixed whitelist of markup. This is the ONLY code path allowed to set
 // .innerHTML from model-generated text.
+//
+// Supported: ATX headings, paragraphs (soft newline -> <br>), bullet and
+// numbered lists (nested, tight/loose), blockquotes, fenced and inline
+// code, GFM tables, thematic breaks, links (scheme-whitelisted), bold,
+// italic, bold-italic, strikethrough. Everything else renders as text.
+//
+// The order is invariant: escapeHtml runs on every fragment BEFORE any
+// tag is introduced. Block structure is detected on the raw lines, but
+// only escaped substrings are ever interpolated into the output.
 // ---------------------------------------------------------------
 
 function escapeHtml(str) {
@@ -29,26 +38,273 @@ function escapeHtml(str) {
   }[ch]));
 }
 
+// Only these schemes may reach an href. Everything else (javascript:,
+// data:, vbscript:, …) falls back to rendering the link as plain text.
+// The url arrives already escaped, so quotes cannot break the attribute.
+function safeUrl(escapedUrl) {
+  const probe = escapedUrl.trim().replace(/&amp;/g, '&');
+  if (/^(https?:\/\/|mailto:|#|\/|\.{1,2}\/)/i.test(probe)) return escapedUrl.trim();
+  return null;
+}
+
+// Emphasis rules, applied to already-escaped text. Longest markers first
+// so *** wins over ** wins over *. The underscore forms require a
+// boundary on both sides so snake_case identifiers survive intact.
+function mdEmphasis(s) {
+  return s
+    .replace(/\*\*\*(?!\s)([\s\S]*?[^\s*])\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(?!\s)([\s\S]*?[^\s*])\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(?!\s)([\s\S]*?[^\s*])\*/g, '<em>$1</em>')
+    .replace(/(^|[^\w\\])___(?!\s)([\s\S]*?[^\s_])___(?!\w)/g, '$1<strong><em>$2</em></strong>')
+    .replace(/(^|[^\w\\])__(?!\s)([\s\S]*?[^\s_])__(?!\w)/g, '$1<strong>$2</strong>')
+    .replace(/(^|[^\w\\])_(?!\s)([\s\S]*?[^\s_])_(?!\w)/g, '$1<em>$2</em>')
+    .replace(/~~(?!\s)([\s\S]*?[^\s~])~~/g, '<del>$1</del>');
+}
+
+// Inline markup for one already-escaped run of text. Code spans and link
+// hrefs are lifted out into `frags` before emphasis runs, so a `*` inside
+// a code span or a `_` inside a URL is never mistaken for markup. The
+// placeholders use NUL, which renderStatementHTML strips from the input.
 function mdInline(escapedText) {
-  return escapedText
-    .replace(/`([^`]+?)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+?)\*/g, '<em>$1</em>');
+  const frags = [];
+  const hold = (html) => `\u0000${frags.push(html) - 1}\u0000`;
+
+  let s = escapedText.replace(/(`+)([\s\S]+?)\1/g, (_, __, code) => hold(`<code>${code}</code>`));
+
+  s = s.replace(
+    /\[([^\]\n]*)\]\(\s*([^\s)]*)(?:\s+&quot;[^\n]*?&quot;)?\s*\)/g,
+    (whole, text, url) => {
+      const href = safeUrl(url);
+      if (!href) return whole;
+      return hold(`<a href="${href}" target="_blank" rel="noopener noreferrer">${mdEmphasis(text)}</a>`);
+    },
+  );
+
+  s = mdEmphasis(s);
+
+  // Held fragments can themselves contain placeholders (a code span inside
+  // link text), so restore until the string stops changing.
+  for (let pass = 0; pass < 5 && s.includes('\u0000'); pass++) {
+    s = s.replace(/\u0000(\d+)\u0000/g, (m, i) => frags[Number(i)] ?? m);
+  }
+  return s;
+}
+
+const RE_FENCE = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)\s*$/;
+const RE_HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+const RE_HR = /^ {0,3}([-*_])[ \t]*(?:\1[ \t]*){2,}$/;
+const RE_QUOTE = /^ {0,3}>/;
+const RE_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/;
+
+// A line that starts a new block interrupts an open paragraph. Models
+// routinely omit the blank line before a list, so lists count here.
+function startsBlock(line) {
+  return RE_FENCE.test(line) || RE_HEADING.test(line) || RE_HR.test(line)
+    || RE_QUOTE.test(line) || RE_ITEM.test(line);
+}
+
+const indentOf = (line) => line.match(/^\s*/)[0].length;
+const isOrderedMarker = (marker) => /\d/.test(marker);
+
+function splitTableRow(line) {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|')) s = s.slice(0, -1);
+  return s.split('|').map((cell) => cell.trim());
+}
+
+function tableAlignments(delimLine) {
+  return splitTableRow(delimLine).map((cell) => {
+    const left = cell.startsWith(':');
+    const right = cell.endsWith(':');
+    if (left && right) return 'center';
+    if (right) return 'right';
+    if (left) return 'left';
+    return null;
+  });
+}
+
+// A GFM table needs a header row and a delimiter row whose cell count matches.
+function isTableStart(lines, i) {
+  const header = lines[i];
+  const delim = lines[i + 1];
+  if (!header || !delim || !header.includes('|')) return false;
+  if (!/^[\s|:-]+$/.test(delim) || !delim.includes('-') || !delim.includes('|')) return false;
+  return splitTableRow(header).length === splitTableRow(delim).length;
+}
+
+function renderTable(lines, i) {
+  const headers = splitTableRow(lines[i]);
+  const aligns = tableAlignments(lines[i + 1]);
+  let j = i + 2;
+  const rows = [];
+  while (j < lines.length && lines[j].trim() && lines[j].includes('|')) {
+    rows.push(splitTableRow(lines[j]));
+    j++;
+  }
+  const cell = (tag, text, align) => {
+    const style = align ? ` style="text-align:${align}"` : '';
+    return `<${tag}${style}>${mdInline(escapeHtml(text ?? ''))}</${tag}>`;
+  };
+  const head = `<tr>${headers.map((h, k) => cell('th', h, aligns[k])).join('')}</tr>`;
+  const body = rows
+    .map((r) => `<tr>${headers.map((_, k) => cell('td', r[k], aligns[k])).join('')}</tr>`)
+    .join('');
+  const table = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  return { html: `<div class="md-table-wrap">${table}</div>`, next: j };
+}
+
+// Collects one run of sibling list items starting at `lines[i]`. Each item
+// keeps its own raw lines (with the marker indent stripped) so nested lists
+// and multi-paragraph items recurse back through mdBlocks.
+function renderList(lines, i) {
+  const first = lines[i].match(RE_ITEM);
+  const baseIndent = first[1].length;
+  const ordered = isOrderedMarker(first[2]);
+  const start = ordered ? parseInt(first[2], 10) : null;
+  const items = [];
+  let current = null;
+  let tight = true;
+  let pendingBlank = false;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) {
+      const next = lines[i + 1];
+      const continues = next && next.trim()
+        && (indentOf(next) > baseIndent || (RE_ITEM.test(next) && indentOf(next) <= baseIndent + 1));
+      if (!continues) break;
+      pendingBlank = true;
+      i++;
+      continue;
+    }
+
+    const item = line.match(RE_ITEM);
+    const indent = indentOf(line);
+
+    if (item && indent <= baseIndent + 1) {
+      if (isOrderedMarker(item[2]) !== ordered) break; // a bullet list after a numbered one is a new list
+      if (pendingBlank) tight = false;
+      current = [item[4]];
+      items.push(current);
+    } else if (!current) {
+      break;
+    } else if (indent > baseIndent) {
+      if (pendingBlank) { current.push(''); tight = false; }
+      // Strip one level of indent so nested markers land at column 0.
+      current.push(line.slice(Math.min(indent, baseIndent + first[2].length + first[3].length)));
+    } else {
+      if (pendingBlank) break; // blank line then unindented text ends the list
+      current.push(line.trim()); // lazy continuation of the item's paragraph
+    }
+    pendingBlank = false;
+    i++;
+  }
+
+  const html = items
+    .map((itemLines) => {
+      let inner = mdBlocks(itemLines);
+      // Tight items drop the leading <p> so bullets don't gain paragraph
+      // spacing. Only the first one — anything after it is a nested list.
+      if (tight) inner = inner.replace(/^<p>([\s\S]*?)<\/p>/, '$1');
+      return `<li>${inner}</li>`;
+    })
+    .join('');
+
+  const tag = ordered ? 'ol' : 'ul';
+  const startAttr = ordered && start !== 1 ? ` start="${start}"` : '';
+  return { html: `<${tag}${startAttr}>${html}</${tag}>`, next: i };
+}
+
+// Block-level pass. Every fragment of `lines` that ends up inside the
+// returned HTML goes through escapeHtml first; the tags themselves are
+// literals chosen here, never derived from the input.
+function mdBlocks(lines) {
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) { i++; continue; }
+
+    const fence = line.match(RE_FENCE);
+    if (fence) {
+      const closer = new RegExp(`^ {0,3}${fence[1][0] === '`' ? '`' : '~'}{${fence[1].length},}\\s*$`);
+      const buf = [];
+      i++;
+      while (i < lines.length && !closer.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++; // consume the closing fence (a no-op past the end while streaming)
+      const cls = fence[2] ? ` class="lang-${escapeHtml(fence[2])}"` : '';
+      out.push(`<pre><code${cls}>${escapeHtml(buf.join('\n'))}</code></pre>`);
+      continue;
+    }
+
+    const heading = line.match(RE_HEADING);
+    if (heading) {
+      const level = heading[1].length;
+      out.push(`<h${level}>${mdInline(escapeHtml(heading[2]))}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    if (RE_HR.test(line)) { out.push('<hr>'); i++; continue; }
+
+    if (RE_QUOTE.test(line)) {
+      const buf = [];
+      // Lazy continuation: unmarked non-blank lines stay inside the quote.
+      while (i < lines.length && lines[i].trim() && (RE_QUOTE.test(lines[i]) || buf.length)) {
+        buf.push(lines[i].replace(/^ {0,3}>[ \t]?/, ''));
+        i++;
+      }
+      out.push(`<blockquote>${mdBlocks(buf)}</blockquote>`);
+      continue;
+    }
+
+    if (isTableStart(lines, i)) {
+      const table = renderTable(lines, i);
+      out.push(table.html);
+      i = table.next;
+      continue;
+    }
+
+    if (RE_ITEM.test(line)) {
+      const list = renderList(lines, i);
+      out.push(list.html);
+      i = list.next;
+      continue;
+    }
+
+    const buf = [];
+    while (i < lines.length && lines[i].trim() && !startsBlock(lines[i]) && !isTableStart(lines, i)) {
+      buf.push(lines[i].trim());
+      i++;
+    }
+    // A soft newline inside a paragraph stays a visible break — models use
+    // single newlines as line breaks far more often than as reflowable text.
+    out.push(`<p>${buf.map((l) => mdInline(escapeHtml(l))).join('<br>')}</p>`);
+  }
+
+  return out.join('');
 }
 
 // Renders a raw (untrusted) statement into a safe HTML string. Every
 // character of `raw` passes through escapeHtml before any tag is ever
-// introduced; mdInline only wraps already-escaped substrings in a
-// fixed whitelist of tags via regex substitution.
+// introduced; the markdown passes only wrap already-escaped substrings in
+// a fixed whitelist of tags.
 function renderStatementHTML(raw) {
-  return String(raw)
-    .split('\n')
-    .map((line) => {
-      const m = line.match(/^>\s?(.*)$/);
-      if (m) return `<blockquote>${mdInline(escapeHtml(m[1]))}</blockquote>`;
-      return mdInline(escapeHtml(line));
-    })
-    .join('\n');
+  const text = String(raw).replace(/\u0000/g, '').replace(/\r\n?/g, '\n');
+  return mdBlocks(text.split('\n'));
+}
+
+// Parks the streaming caret at the end of the last rendered block instead
+// of after it, so it sits on the text baseline rather than a line below.
+function appendCaret(container) {
+  let target = container;
+  while (target.lastElementChild) target = target.lastElementChild;
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  target.appendChild(caret);
 }
 
 // ---------------------------------------------------------------
@@ -578,7 +834,8 @@ function appendStatementRow(data) {
 function updateLiveStatementBody() {
   const bodyEl = document.getElementById(`stmt-body-${state.liveTurn.turn}`);
   if (!bodyEl) return;
-  bodyEl.innerHTML = `${renderStatementHTML(state.liveTurn.text)}<span class="caret"></span>`;
+  bodyEl.innerHTML = renderStatementHTML(state.liveTurn.text);
+  appendCaret(bodyEl);
 }
 
 function finalizeStatementRow(entry) {
