@@ -1,0 +1,16 @@
+katex 0.18.1 — https://registry.npmjs.org/katex/-/katex-0.18.1.tgz
+
+Vendored, not npm-installed: the frontend has no build step and no bundler, so
+`public/` is served as-is by express.static and the browser loads these files
+directly. Copied verbatim from the package's `dist/`:
+
+  katex.min.js
+  katex.min.css   (unmodified — do not hand-edit, so updates stay a plain copy)
+  fonts/*.woff2   (woff2 ONLY; the woff/ttf siblings are deliberately omitted)
+
+Dropping the woff/ttf fonts takes this directory from ~1.1 MB to ~590 KB. It is
+safe because every `src:` list in katex.min.css names woff2 first, so a browser
+that supports woff2 never requests the fallbacks — and one that doesn't cannot
+run this app anyway.
+
+To update: `npm pack katex`, untar, and re-copy the four items above.
