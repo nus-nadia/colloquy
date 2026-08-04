@@ -2,9 +2,30 @@
 
 import { randomUUID } from 'node:crypto';
 import { getProvider } from './providers/index.js';
-import { buildSystemPrompt, openingModeratorMessage, finalRoundModeratorNote, moderatorInterjection } from './prompts.js';
+import { getVisualProvider } from './visuals/index.js';
+import {
+  buildSystemPrompt,
+  openingModeratorMessage,
+  finalRoundModeratorNote,
+  moderatorInterjection,
+  buildVisualDirectorPrompt,
+  composeVisualPrompt,
+  VISUAL_ARCHETYPES,
+  DEFAULT_VISUAL_ARCHETYPE,
+  VISUAL_PROMPT_MAX_CHARS,
+  VISUAL_ALT_MAX_CHARS,
+} from './prompts.js';
 
 const AUTO_ADVANCE_PAUSE_MS = 1500;
+
+// Turn-visual pipeline tuning.
+const VISUAL_DIRECTOR_MAX_TOKENS = 700; // call 1 returns a small JSON object
+const VISUAL_STATEMENT_MAX_CHARS = 6000; // the director only needs the argument
+const VISUAL_IMAGE_SIZE = '1536x1024'; // 3:2 landscape, matches the style preamble
+// Sessions are never evicted (see CLAUDE.md), and image bytes are by far the
+// largest thing a session can accumulate. Past this budget the pipeline
+// short-circuits to 'skipped' rather than growing the process without bound.
+const VISUAL_SESSION_BYTE_BUDGET = 40 * 1024 * 1024;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,6 +56,34 @@ function wordTargetToMaxTokens(wordTarget) {
   return Math.min(4096, Math.max(512, Math.round(words * 8)));
 }
 
+// Parse the visual director's reply into { archetype, prompt, alt }.
+// Deliberately forgiving: a model that wraps its JSON in a code fence or adds
+// a sentence of preamble has still done the useful part of the job, and an
+// unusable reply degrades to the default archetype rather than failing the
+// whole visual. Returns null only when there is no object to be found at all.
+function parseDirectorReply(raw) {
+  const text = String(raw ?? '').trim();
+  if (!text) return null;
+  // Strip a stray ```json … ``` fence, then take the outermost braces.
+  const unfenced = text.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '');
+  const start = unfenced.indexOf('{');
+  const end = unfenced.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(unfenced.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const archetype = typeof parsed.archetype === 'string' ? parsed.archetype.trim().toLowerCase() : '';
+  return {
+    archetype: Object.hasOwn(VISUAL_ARCHETYPES, archetype) ? archetype : DEFAULT_VISUAL_ARCHETYPE,
+    prompt: String(parsed.prompt ?? '').trim().slice(0, VISUAL_PROMPT_MAX_CHARS),
+    alt: String(parsed.alt ?? '').trim().slice(0, VISUAL_ALT_MAX_CHARS),
+  };
+}
+
 export class DebateSession {
   constructor(config) {
     this.id = randomUUID();
@@ -47,6 +96,14 @@ export class DebateSession {
     this.turnInFlight = false;
     this._looping = false;
     this.subscribers = new Set();
+    // Generated turn visuals, keyed by turn index: { bytes: Buffer, mime }.
+    // Bytes live here and ONLY here — never on a transcript entry and never in
+    // getSnapshot(), which is re-sent to every reconnecting tab and which
+    // EventSource re-requests on its own after a dropped connection. Base64 in
+    // the snapshot would push megabytes per reconnect. The entry carries the
+    // metadata; the bytes are fetched once over GET /api/debates/:id/visuals/:turn.
+    this.visualBytes = new Map();
+    this.visualBytesTotal = 0;
   }
 
   // ---------- SSE plumbing ----------
@@ -180,6 +237,14 @@ export class DebateSession {
       this.turn += 1;
       this.broadcast('turn_end', entry);
 
+      // Fire-and-forget, and awaited by nobody: the visual pipeline is off the
+      // text-streaming critical path, so the next turn starts (and the closing
+      // ceremony runs) without waiting on an image API. _generateVisual traps
+      // everything itself — see the error-policy note on it.
+      if (this.config.visuals?.enabled) {
+        this._generateVisual(entry).catch(() => {});
+      }
+
       if (this.turn >= this.config.maxTurns) {
         this._finish();
       }
@@ -191,6 +256,100 @@ export class DebateSession {
       this.broadcastState();
     } finally {
       this.turnInFlight = false;
+    }
+  }
+
+  // ---------- turn visuals ----------
+
+  _broadcastVisual(entry) {
+    this.broadcast('visual_status', { turn: entry.turn, visual: entry.visual });
+  }
+
+  /**
+   * Two-call pipeline that illustrates a completed statement: a text model
+   * picks an archetype and writes the subject, then an image model draws it.
+   *
+   * ERROR POLICY — deliberately different from runTurn(). Everywhere else a
+   * provider failure sets `lastError` and forces `state = 'paused'`. A
+   * rate-limited or slow image API must never halt a live classroom, so this
+   * method traps its own errors and touches NONE of `lastError`, `state`, or
+   * `turnInFlight`. A failed visual is a failed visual and nothing more.
+   */
+  async _generateVisual(entry) {
+    const visuals = this.config.visuals;
+    entry.visual = { status: 'pending', archetype: null, alt: null, mime: null, error: null };
+
+    // Budget guard before doing any work — see VISUAL_SESSION_BYTE_BUDGET.
+    if (this.visualBytesTotal >= VISUAL_SESSION_BYTE_BUDGET) {
+      entry.visual.status = 'skipped';
+      this._broadcastVisual(entry);
+      return;
+    }
+    this._broadcastVisual(entry);
+
+    try {
+      // Call 1 — the director, over the ordinary text-provider contract, using
+      // the SAME provider as the speaking agent: no extra key to configure,
+      // and the Mock provider covers it offline. A lone user message satisfies
+      // the contract's "first and last entries are role 'user'" rule.
+      const textProvider = getProvider(this.config.agents[entry.agentIndex].provider);
+      if (!textProvider) throw new Error('Unknown text provider for the visual director.');
+      const imageProvider = getVisualProvider(visuals.provider);
+      if (!imageProvider) throw new Error(`Unknown visual provider "${visuals.provider}".`);
+
+      const directorSystem = buildVisualDirectorPrompt({ paperTitle: this.config.paper.title });
+      let raw = '';
+      for await (const chunk of textProvider.stream({
+        model: visuals.directorModel,
+        system: directorSystem,
+        messages: [{ role: 'user', content: entry.text.slice(0, VISUAL_STATEMENT_MAX_CHARS) }],
+        maxTokens: VISUAL_DIRECTOR_MAX_TOKENS,
+      })) {
+        if (chunk) raw += chunk;
+      }
+
+      const spec = parseDirectorReply(raw) ?? {
+        archetype: DEFAULT_VISUAL_ARCHETYPE,
+        prompt: entry.text.slice(0, VISUAL_PROMPT_MAX_CHARS),
+        alt: '',
+      };
+
+      // Step 2 — the server composes the final prompt. Art direction and
+      // composition are server-owned; the model only supplied the subject.
+      const prompt = composeVisualPrompt({
+        agentIndex: entry.agentIndex,
+        archetype: spec.archetype,
+        prompt: spec.prompt,
+      });
+
+      // Step 3 — the image model.
+      const { bytes, mime } = await imageProvider.render({
+        model: visuals.imageModel,
+        prompt,
+        size: VISUAL_IMAGE_SIZE,
+        // Debate context, ignored by the network-backed adapters; the mock
+        // adapter draws from it. See server/visuals/index.js.
+        archetype: spec.archetype,
+        turn: entry.turn,
+        agentIndex: entry.agentIndex,
+      });
+      if (!bytes?.length) throw new Error('Visual provider returned no bytes.');
+
+      this.visualBytes.set(entry.turn, { bytes, mime });
+      this.visualBytesTotal += bytes.length;
+
+      entry.visual = {
+        status: 'ready',
+        archetype: spec.archetype,
+        alt: spec.alt || null,
+        mime,
+        error: null,
+      };
+      this._broadcastVisual(entry);
+    } catch (err) {
+      entry.visual.status = 'failed';
+      entry.visual.error = err?.message ? String(err.message).slice(0, 200) : 'Visual generation failed.';
+      this._broadcastVisual(entry);
     }
   }
 
@@ -334,6 +493,14 @@ export class DebateSession {
       lines.push('');
       lines.push(entry.text);
       lines.push('');
+      // A generated visual is described, not linked: the export is a
+      // downloaded file, so a relative /api/... image URL would be dead the
+      // moment it leaves the app (and the session it points at is gone on the
+      // next server restart anyway). The alt text is the durable artifact.
+      if (entry.type !== 'moderator' && entry.visual?.status === 'ready' && entry.visual.alt) {
+        lines.push(`*Visual: ${entry.visual.alt}*`);
+        lines.push('');
+      }
     }
     return lines.join('\n');
   }

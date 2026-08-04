@@ -244,6 +244,40 @@ button{font:inherit;}
 .stmt-body .katex-display > .katex{font-size:1.12em;}
 .stmt-body .katex-error{color:var(--state-error);font-family:var(--font-mono);font-size:0.88em;}
 
+/* ---------- Generated visual panel ---------- */
+/* .stmt-visual is a SIBLING of .stmt-body, never a child: .stmt-body's
+   innerHTML is replaced on every streamed token and appendCaret() descends
+   into its last element child, so a panel nested inside would be destroyed
+   each delta and would swallow the caret.
+
+   Normal mode stacks the panel below the body at full card width. There is
+   no room beside 520px of text inside the 1056px transcript without crossing
+   the centre spine, and normal mode is the instructor console — the card
+   does not widen here. Presentation mode is where the split pays off. */
+.stmt-split{display:block;}
+
+.stmt-visual{
+  margin:0 20px 20px;
+  background:var(--bg-surface);
+  border:1px solid var(--rule-hairline);
+  box-shadow:0 1px 2px rgba(33,28,21,.06), 0 4px 10px rgba(33,28,21,.04);
+}
+/* The aspect ratio is declared up front so the panel reserves its space
+   before the image lands — nothing reflows mid-debate. */
+.stmt-visual img{width:100%;display:block;aspect-ratio:3/2;object-fit:cover;}
+.stmt-visual figcaption{
+  font-family:var(--font-sans);font-size:14px;line-height:1.4;color:var(--ink-secondary);
+  padding:10px 12px;border-top:1px solid var(--rule-hairline);
+}
+/* pending + failed: one quiet sunken plate. No spinner, no red — §5 asks
+   for calm, not alarming. */
+.stmt-visual-placeholder{
+  aspect-ratio:3/2;background:var(--bg-sunken);
+  display:flex;align-items:center;justify-content:center;
+  padding:16px;text-align:center;
+}
+.stmt-visual-note{font-family:var(--font-sans);font-size:13px;line-height:1.45;color:var(--ink-tertiary);}
+
 /* streaming state */
 .stmt.is-live .crest-a{animation:glowA 1.8s ease-in-out infinite;}
 .stmt.is-live .crest-b{animation:glowB 1.8s ease-in-out infinite;}
@@ -392,7 +426,12 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 .agent-card-head .role{font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-tertiary);}
 
 .settings-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;}
+/* Visuals sit in their own row under the 3-column settings grid; the three
+   dependent fields reuse .settings-grid so they collapse identically. */
+.settings-visuals{margin-top:24px;padding-top:24px;border-top:1px solid var(--rule-hairline);}
+.visuals-fields{margin-top:20px;}
 .segmented{display:flex;border:1px solid var(--rule-strong);border-radius:3px;overflow:hidden;}
+.segmented-narrow{max-width:260px;}
 .segmented button{flex:1;padding:10px 6px;background:var(--bg-sunken);border:none;border-left:1px solid var(--rule-strong);
   font-family:var(--font-sans);font-size:13px;color:var(--ink-secondary);cursor:pointer;}
 .segmented button:first-child{border-left:none;}
@@ -430,7 +469,34 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 #app-shell.presentation .stmt-row.agentB{padding-left:6%;}
 #app-shell.presentation .controls-bar.auto-hide{opacity:0;}
 
+/* Presentation mode is where the panel goes beside the text. The card is
+   ~78% wide here with a previously unbounded body, running well past the
+   62-66ch ceiling of §4; splitting it restores the measure AND makes room
+   for the graphic. min-width:0 keeps a wide table or <pre> from blowing the
+   flex item out past its share. */
+#app-shell.presentation .stmt-split{display:flex;gap:40px;align-items:flex-start;}
+/* The panel sits on the card's OUTER edge, mirrored per side. §4 fixes that
+   edge per agent — it is the same edge that carries the clipped corner:
+   left for Agent A (left column), right for Agent B. DOM order is body then
+   figure, so Agent A reverses and Agent B does not. Keeping the panels
+   outboard also leaves the centre spine — the "debate floor" aisle — clear;
+   the opposite assignment parks both images across it. */
+#app-shell.presentation .stmt.agentA .stmt-split{flex-direction:row-reverse;}
+#app-shell.presentation .stmt.agentB .stmt-split{flex-direction:row;}
+#app-shell.presentation .stmt-body{max-width:62ch;min-width:0;flex:1 1 auto;}
+#app-shell.presentation .stmt-visual{flex:0 0 clamp(320px,30%,460px);}
+/* Mirrored so the outer gutter matches the body's 20px inner padding on
+   whichever side the panel lands. */
+#app-shell.presentation .stmt.agentA .stmt-visual{margin:18px 0 20px 20px;}
+#app-shell.presentation .stmt.agentB .stmt-visual{margin:18px 20px 20px 0;}
+#app-shell.presentation .stmt-visual figcaption{font-size:18px;padding:12px 14px;}
+#app-shell.presentation .stmt-visual-note{font-size:17px;}
+
 @media (max-width:760px){
   .agent-cards-grid, .settings-grid{grid-template-columns:1fr;}
   .stmt-row.agentA, .stmt-row.agentB{padding-left:0;padding-right:0;}
+  /* No room for a side-by-side split at this width, presenting or not. */
+  #app-shell.presentation .stmt-split{display:block;}
+  #app-shell.presentation .stmt.agentA .stmt-visual,
+  #app-shell.presentation .stmt.agentB .stmt-visual{margin:0 20px 20px;}
 }

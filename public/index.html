@@ -142,6 +142,39 @@
           </div>
         </div>
       </div>
+
+      <!-- Visuals live in their own row: the settings grid above is a
+           deliberate 3-column set, and a fourth+ field would unbalance it.
+           Off is the default so the zero-key Mock demo is unchanged and
+           billed image generation stays an explicit choice. -->
+      <div class="settings-visuals" id="visuals-settings">
+        <div class="field" style="margin-bottom:0;">
+          <label class="field-label">Generate visuals</label>
+          <div class="segmented segmented-narrow" id="visuals-segmented">
+            <button type="button" class="active" data-value="off">Off</button>
+            <button type="button" data-value="on">On</button>
+          </div>
+          <p class="field-hint">Each completed statement gains a generated infographic panel. Uses the image provider's API on every turn.</p>
+        </div>
+        <div class="settings-grid visuals-fields hidden" id="visuals-fields">
+          <div class="field" style="margin-bottom:0;">
+            <label class="field-label" for="visual-provider">Visual provider</label>
+            <select class="field-input" id="visual-provider"></select>
+            <p class="field-hint hidden" id="visual-provider-hint">Add an API key in <code>.env</code> to enable this provider.</p>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="field-label" for="visual-image-model">Image model</label>
+            <input class="field-input" type="text" id="visual-image-model" style="font-family:var(--font-mono);font-size:14px;">
+            <p class="field-error hidden" id="visual-image-model-error">Image model name can't be empty.</p>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="field-label" for="visual-director-model">Director model</label>
+            <input class="field-input" type="text" id="visual-director-model" style="font-family:var(--font-mono);font-size:14px;">
+            <p class="field-hint">Writes the image prompt for each statement.</p>
+            <p class="field-error hidden" id="visual-director-model-error">Director model name can't be empty.</p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <div class="begin-row">

@@ -72,6 +72,31 @@ function poolFor(system) {
   return system && system.length % 2 === 0 ? SKEPTIC_TURNS : DEFENDER_TURNS;
 }
 
+// The turn-visual pipeline's first call reuses this same text adapter (same
+// provider as the speaking agent, so it needs no extra key), but wants strict
+// JSON back, not a debate turn. Detect it the same way poolFor() detects a
+// stance: by regex-matching one distinctive line of the system prompt.
+//
+// COUPLING: this literal is the opening of buildVisualDirectorPrompt() in
+// server/prompts.js. Reword it there and this falls through to a debate turn,
+// which the JSON parser rejects — every mock visual would then land on the
+// fallback archetype, silently making the offline pipeline untestable.
+const DIRECTOR_MARKER = /you are the visual director/i;
+
+// One canned director response per archetype, cycled deterministically by the
+// length of the statement being illustrated — so a given turn always draws the
+// same figure, but a debate doesn't repeat one archetype for six turns.
+const DIRECTOR_TURNS = [
+  { archetype: 'comparison', prompt: 'Left column: the general claim the paper advertises. Right column: the single benchmark actually run. Bottom row shows the untested condition.', alt: 'A two-column chart comparing the claimed scope against the one condition actually tested.' },
+  { archetype: 'magnitude', prompt: 'A tall bar for the reported gap between methods and a short bar for the run-to-run spread, with the noise floor crossing both.', alt: 'Two bars comparing the reported effect against the run-to-run noise floor.' },
+  { archetype: 'causal', prompt: 'Method on the left, reported score on the right, joined by a crossed-out arrow; tuning effort sits above as the shared cause of both.', alt: 'A causal diagram showing tuning effort as a confounder behind the reported gap.' },
+  { archetype: 'partition', prompt: 'A grid standing for every setting the claim covers, with the handful of seeds actually measured filled in one corner.', alt: 'A grid of settings with the small measured sample shaded in one corner.' },
+  { archetype: 'flow', prompt: 'A pipeline from data split to tuning to evaluation to headline number, with the unreported validation split as the weak stage.', alt: 'A four-stage pipeline with the unreported validation split marked as the weak link.' },
+  { archetype: 'venn', prompt: 'A small circle for the benchmark evidence sitting inside a large circle for the general claim, with the uncovered ground emphasized.', alt: 'Two circles showing the general claim reaching well beyond the benchmark evidence.' },
+  { archetype: 'quadrant', prompt: 'Axes of accuracy against compute cost, with the method placed in the high-accuracy high-cost quadrant and the win quadrant empty.', alt: 'A quadrant chart placing the method in a tradeoff rather than an outright win.' },
+  { archetype: 'timeline', prompt: 'Four prior results marked along a line, with the paper as the larger final marker showing where the novelty actually sits.', alt: 'A timeline of prior work with this paper as the final, larger marker.' },
+];
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -86,6 +111,19 @@ export default {
   },
 
   async *stream({ system, messages }) {
+    if (DIRECTOR_MARKER.test(system || '')) {
+      const statement = messages.map((m) => m.content).join('');
+      const spec = DIRECTOR_TURNS[statement.length % DIRECTOR_TURNS.length];
+      // Emit in two chunks: the caller concatenates, so this exercises that
+      // path rather than handing it one pre-assembled string.
+      const json = JSON.stringify(spec);
+      const split = Math.floor(json.length / 2);
+      await sleep(60);
+      yield json.slice(0, split);
+      await sleep(60);
+      yield json.slice(split);
+      return;
+    }
     const pool = poolFor(system);
     const priorTurnsBySpeaker = messages.filter((m) => m.role === 'assistant').length;
     const text = pool[priorTurnsBySpeaker % pool.length];
