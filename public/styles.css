@@ -288,11 +288,10 @@ button{font:inherit;}
   display:none;
   font-family:var(--font-sans);font-weight:600;font-size:12px;letter-spacing:.02em;
   color:var(--ink-tertiary);background:transparent;border:none;cursor:pointer;padding:2px 4px;
+  transition:opacity .2s ease;
 }
 .mod-action:hover{color:var(--ink-primary);text-decoration:underline;}
-#app-shell.can-moderate:not(.presentation) .mod-action{display:inline-flex;}
-#app-shell.presentation .mod-action,
-#app-shell.presentation #mod-inject{display:none !important;}
+#app-shell.can-moderate .mod-action{display:inline-flex;}
 
 .edited-tag{
   font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);
@@ -323,6 +322,7 @@ button{font:inherit;}
 .mod-inject-toggle{
   background:transparent;border:none;cursor:pointer;padding:4px 8px;letter-spacing:.02em;
   font-family:var(--font-serif);font-style:italic;font-size:14px;color:var(--ink-tertiary);
+  transition:opacity .2s ease;
 }
 .mod-inject-toggle:hover{color:var(--ink-secondary);}
 
@@ -445,7 +445,23 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 #app-shell.presentation .stmt-body{font-size:28px;line-height:1.55;}
 #app-shell.presentation .stmt-row.agentA{padding-right:6%;}
 #app-shell.presentation .stmt-row.agentB{padding-left:6%;}
-#app-shell.presentation .controls-bar.auto-hide{opacity:0;}
+
+/* Moderation stays available on the projector, scaled to the presentation
+   column — the moderator types the text the room will read at 28px. */
+#app-shell.presentation .mod-note-row .mod-editor,
+#app-shell.presentation #mod-inject .mod-editor{width:min(56%,100%);}
+#app-shell.presentation .mod-textarea{font-size:28px;line-height:1.55;min-height:160px;}
+#app-shell.presentation .mod-inject-toggle{font-size:17px;}
+
+/* Instructor chrome — controls bar plus the moderator affordances — fades
+   together after 3s idle and returns on the next movement or keypress.
+   Only the *entry points* fade: an open editor is never pulled out from
+   under a half-typed note. */
+#app-shell.presentation.auto-hide .controls-bar{opacity:0;}
+#app-shell.presentation.auto-hide .mod-action,
+#app-shell.presentation.auto-hide .mod-inject-toggle{opacity:0;pointer-events:none;}
+#app-shell.presentation.auto-hide .mod-action:focus-visible,
+#app-shell.presentation.auto-hide .mod-inject-toggle:focus-visible{opacity:1;pointer-events:auto;}
 
 @media (max-width:760px){
   .agent-cards-grid, .settings-grid{grid-template-columns:1fr;}
