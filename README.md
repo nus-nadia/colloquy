@@ -25,6 +25,8 @@ Whenever the debate is paused between turns (always the case in manual advance m
 
 Moderator entries don't count as turns: round numbering, `maxTurns`, and the closing statement count are unaffected. Everything survives a refresh and appears in both export formats. Moderation is unavailable while a statement is streaming, while auto-advance is running, and after the debate finishes (the API answers 409 in those states).
 
+Both affordances work in presentation mode too, so you can intervene without dropping off the projector. There they join the controls bar as auto-hiding chrome: visible on entry and on any mouse movement or keypress, faded out after 3s of inactivity. Only the entry points fade — an editor you have already opened stays on screen with its draft intact, so a half-typed note is never pulled out from under you.
+
 ## Turn visuals
 
 Optionally, each completed statement gains a generated infographic that illustrates the argument it just made — the graphic you'd put on a slide to make the point land. Turn it on in **Debate settings → Generate visuals** (it is **off by default**, so the keyless Mock demo and every existing debate are unchanged, and nothing bills without an explicit choice), then pick a visual provider and the two models it uses.

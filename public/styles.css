@@ -98,6 +98,10 @@ button{font:inherit;}
 }
 .wordmark{font-family:var(--font-sans);font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--ink-primary);}
 .masthead-meta{font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);}
+/* Stage-view wordmark doubles as the way back to setup; strip the button
+   chrome so it still reads as the masthead rather than a control. */
+.wordmark-btn{background:none;border:none;padding:0;cursor:pointer;letter-spacing:.14em;}
+.wordmark-btn:hover{text-decoration:underline;text-underline-offset:3px;}
 
 /* ---------- Stage header ---------- */
 .stage-header{
@@ -318,11 +322,10 @@ button{font:inherit;}
   display:none;
   font-family:var(--font-sans);font-weight:600;font-size:12px;letter-spacing:.02em;
   color:var(--ink-tertiary);background:transparent;border:none;cursor:pointer;padding:2px 4px;
+  transition:opacity .2s ease;
 }
 .mod-action:hover{color:var(--ink-primary);text-decoration:underline;}
-#app-shell.can-moderate:not(.presentation) .mod-action{display:inline-flex;}
-#app-shell.presentation .mod-action,
-#app-shell.presentation #mod-inject{display:none !important;}
+#app-shell.can-moderate .mod-action{display:inline-flex;}
 
 .edited-tag{
   font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);
@@ -353,6 +356,7 @@ button{font:inherit;}
 .mod-inject-toggle{
   background:transparent;border:none;cursor:pointer;padding:4px 8px;letter-spacing:.02em;
   font-family:var(--font-serif);font-style:italic;font-size:14px;color:var(--ink-tertiary);
+  transition:opacity .2s ease;
 }
 .mod-inject-toggle:hover{color:var(--ink-secondary);}
 
@@ -381,6 +385,19 @@ button{font:inherit;}
 .btn-secondary:disabled{color:var(--ink-tertiary);border-color:var(--rule-hairline);cursor:not-allowed;background:transparent;}
 .btn-quiet{background:transparent;color:var(--state-error-700);border:none;padding:10px 6px;text-decoration:none;}
 .btn-quiet:hover{text-decoration:underline;}
+
+/* ---------- Confirmation dialog ---------- */
+.confirm-dialog{
+  border:1px solid var(--rule-strong);border-radius:3px;padding:0;
+  background:var(--bg-surface);color:var(--ink-primary);
+  max-width:min(440px,calc(100vw - 48px));
+  box-shadow:0 18px 44px rgba(33,28,21,.28);
+}
+.confirm-dialog::backdrop{background:var(--bg-scrim);}
+.confirm-card{padding:26px 28px 22px;}
+.confirm-title{font-family:var(--font-serif);font-weight:700;font-size:21px;margin:0 0 10px;}
+.confirm-copy{font-family:var(--font-sans);font-size:14px;line-height:1.5;color:var(--ink-secondary);margin:0 0 22px;}
+.confirm-actions{display:flex;justify-content:flex-end;gap:10px;}
 
 /* ---------- Jump-to-live pill ---------- */
 .jump-pill{
@@ -467,7 +484,23 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 #app-shell.presentation .stmt-body{font-size:28px;line-height:1.55;}
 #app-shell.presentation .stmt-row.agentA{padding-right:6%;}
 #app-shell.presentation .stmt-row.agentB{padding-left:6%;}
-#app-shell.presentation .controls-bar.auto-hide{opacity:0;}
+
+/* Moderation stays available on the projector, scaled to the presentation
+   column — the moderator types the text the room will read at 28px. */
+#app-shell.presentation .mod-note-row .mod-editor,
+#app-shell.presentation #mod-inject .mod-editor{width:min(56%,100%);}
+#app-shell.presentation .mod-textarea{font-size:28px;line-height:1.55;min-height:160px;}
+#app-shell.presentation .mod-inject-toggle{font-size:17px;}
+
+/* Instructor chrome — controls bar plus the moderator affordances — fades
+   together after 3s idle and returns on the next movement or keypress.
+   Only the *entry points* fade: an open editor is never pulled out from
+   under a half-typed note. */
+#app-shell.presentation.auto-hide .controls-bar{opacity:0;}
+#app-shell.presentation.auto-hide .mod-action,
+#app-shell.presentation.auto-hide .mod-inject-toggle{opacity:0;pointer-events:none;}
+#app-shell.presentation.auto-hide .mod-action:focus-visible,
+#app-shell.presentation.auto-hide .mod-inject-toggle:focus-visible{opacity:1;pointer-events:auto;}
 
 /* Presentation mode is where the panel goes beside the text. The card is
    ~78% wide here with a previously unbounded body, running well past the
