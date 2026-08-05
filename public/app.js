@@ -1163,9 +1163,30 @@ function appendStatementRow(data) {
       </div>
     </article>`;
   transcriptBody.appendChild(row);
+  syncVisualMount(row);
   // `data` is either a turn_start payload (no visual yet) or a finished
   // transcript entry (which may carry one) — renderVisualPanel handles both.
   renderVisualPanel(data.turn, data.visual);
+}
+
+// The visual panel has two mount points and changes PARENT with the mode:
+// inside the card (under .stmt-split, below the body) in normal mode, and
+// out in the row gutter beside the card when presenting. It cannot simply
+// be positioned out of the card, because .stmt carries a clip-path for its
+// clipped corner (DESIGN_SPEC §4) and clip-path clips the entire subtree —
+// an overflowing child is painted away, absolutely positioned or not.
+//
+// One figure node, one id, moved rather than duplicated, so renderVisualPanel
+// stays parent-agnostic and no image is ever requested twice.
+function syncVisualMount(row) {
+  const fig = row.querySelector('.stmt-visual');
+  if (!fig) return; // moderator rows have no panel
+  const target = state.presentation ? row : row.querySelector('.stmt-split');
+  if (target && fig.parentElement !== target) target.appendChild(fig);
+}
+
+function syncAllVisualMounts() {
+  for (const row of transcriptBody.querySelectorAll('.stmt-row')) syncVisualMount(row);
 }
 
 // Renders the generated-infographic panel for one turn from the entry's
@@ -1183,14 +1204,21 @@ function renderVisualPanel(turn, visual) {
   fig.textContent = '';
 
   const status = visual && visual.status;
+  // `has-visual` on the ROW (not the figure — fig.className is reassigned
+  // below) is what tells the presentation-mode CSS to hand the gutter to a
+  // panel and narrow the card. Rows without a panel keep the full-width
+  // card, so a visuals-off debate presents exactly as it always did.
+  const row = fig.closest('.stmt-row');
   // Absent (visuals off) or explicitly skipped: render nothing, reserve
   // no space. .hidden is display:none !important, so it also wins over
   // the presentation-mode flex rules.
   if (!status || status === 'skipped') {
     fig.className = 'stmt-visual hidden';
+    if (row) row.classList.remove('has-visual');
     return;
   }
   fig.className = `stmt-visual is-${status}`;
+  if (row) row.classList.add('has-visual');
 
   if (status === 'ready') {
     const img = document.createElement('img');
@@ -1689,6 +1717,10 @@ function togglePresentationMode(force) {
   const next = force !== undefined ? force : !state.presentation;
   state.presentation = next;
   appShell.classList.toggle('presentation', next);
+  // The panel lives in a different parent per mode — move every existing
+  // one now rather than rebuilding the transcript, which would drop scroll
+  // position and the in-flight statement's caret.
+  syncAllVisualMounts();
   updateModeratorInjectUI();
   if (next) {
     document.documentElement.requestFullscreen?.().catch(() => {});

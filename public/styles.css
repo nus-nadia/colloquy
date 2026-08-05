@@ -254,10 +254,12 @@ button{font:inherit;}
    into its last element child, so a panel nested inside would be destroyed
    each delta and would swallow the caret.
 
-   Normal mode stacks the panel below the body at full card width. There is
-   no room beside 520px of text inside the 1056px transcript without crossing
-   the centre spine, and normal mode is the instructor console — the card
-   does not widen here. Presentation mode is where the split pays off. */
+   Normal mode stacks the panel below the body, inside the card, at full
+   card width — normal mode is the instructor console and the card does not
+   widen here. Presentation mode instead lifts the figure OUT of the card
+   into the row gutter beside it (see syncVisualMount() and the presentation
+   rules below), so .stmt-split never actually splits anything; it survives
+   as the in-card mount point for normal mode. */
 .stmt-split{display:block;}
 
 .stmt-visual{
@@ -502,34 +504,58 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 #app-shell.presentation.auto-hide .mod-action:focus-visible,
 #app-shell.presentation.auto-hide .mod-inject-toggle:focus-visible{opacity:1;pointer-events:auto;}
 
-/* Presentation mode is where the panel goes beside the text. The card is
-   ~78% wide here with a previously unbounded body, running well past the
-   62-66ch ceiling of §4; splitting it restores the measure AND makes room
-   for the graphic. min-width:0 keeps a wide table or <pre> from blowing the
-   flex item out past its share. */
-#app-shell.presentation .stmt-split{display:flex;gap:40px;align-items:flex-start;}
-/* The panel sits on the card's OUTER edge, mirrored per side. §4 fixes that
-   edge per agent — it is the same edge that carries the clipped corner:
-   left for Agent A (left column), right for Agent B. DOM order is body then
-   figure, so Agent A reverses and Agent B does not. Keeping the panels
-   outboard also leaves the centre spine — the "debate floor" aisle — clear;
-   the opposite assignment parks both images across it. */
-#app-shell.presentation .stmt.agentA .stmt-split{flex-direction:row-reverse;}
-#app-shell.presentation .stmt.agentB .stmt-split{flex-direction:row;}
-#app-shell.presentation .stmt-body{max-width:62ch;min-width:0;flex:1 1 auto;}
-#app-shell.presentation .stmt-visual{flex:0 0 clamp(320px,30%,460px);}
-/* Mirrored so the outer gutter matches the body's 20px inner padding on
-   whichever side the panel lands. */
-#app-shell.presentation .stmt.agentA .stmt-visual{margin:18px 0 20px 20px;}
-#app-shell.presentation .stmt.agentB .stmt-visual{margin:18px 20px 20px 0;}
+/* Presentation mode puts the panel in the row's empty gutter, BESIDE the
+   card rather than inside it — the card is not made to share its width.
+   syncVisualMount() in app.js reparents the figure to .stmt-row for this;
+   it cannot merely overflow the card, because .stmt carries a clip-path for
+   its clipped corner (§4) and clip-path clips the whole subtree.
+
+   The gutter is the INBOARD side — right of Agent A, left of Agent B — so
+   the panel does cross the centre spine. That is deliberate here: the spine
+   is a hairline behind the row (z-index 0 vs the row's 1), so an opaque
+   panel simply covers it for the length of that turn and it reappears in
+   the gaps between statements. */
+#app-shell.presentation .stmt-row{align-items:flex-start;column-gap:32px;}
+/* The panel takes ALL the width the card leaves, rather than a capped slice:
+   flex-basis 0 + grow means "the rest of the row", so the image runs out to
+   the transcript's own 5% page gutter. */
+#app-shell.presentation .stmt-row > .stmt-visual{
+  flex:1 1 0;min-width:280px;margin:0;
+}
+/* ...and the row's outboard padding is exactly the space the panel wants, so
+   a row carrying one gives it up. Rows without a panel keep the 6% inset —
+   that is what stops a bare card from stretching across the whole projector. */
+#app-shell.presentation .stmt-row.has-visual.agentA{padding-right:0;}
+#app-shell.presentation .stmt-row.has-visual.agentB{padding-left:0;}
+/* DOM order is card then figure, so only Agent B has to swap. */
+#app-shell.presentation .stmt-row.agentB > .stmt-visual{order:-1;}
+/* Only a row that actually carries a visible panel gives up card width.
+   Without this every visuals-off debate would present in a needlessly
+   narrow column. .has-visual is set by renderVisualPanel(). The 58% lands
+   the 28px body near the 62-66ch measure of §4 at projector widths, which
+   is why the body's max-width is left off — the card carries the measure,
+   so no dead parchment opens up beside a capped paragraph. */
+#app-shell.presentation .stmt-row.has-visual > .stmt{width:min(58%,100%);}
+/* Now that width is uncapped, the declared 3/2 would drive the height past
+   the bottom of a 16:9 projector. Capping the height lets the ratio break
+   (width still fills the row) and object-fit:cover crops instead of
+   overflowing, so a statement and its visual stay on one screen. The
+   placeholder is capped to match, or a pending panel would reserve a taller
+   box than the image that replaces it. */
+#app-shell.presentation .stmt-row > .stmt-visual img,
+#app-shell.presentation .stmt-row > .stmt-visual .stmt-visual-placeholder{max-height:72vh;}
 #app-shell.presentation .stmt-visual figcaption{font-size:18px;padding:12px 14px;}
 #app-shell.presentation .stmt-visual-note{font-size:17px;}
 
 @media (max-width:760px){
   .agent-cards-grid, .settings-grid{grid-template-columns:1fr;}
   .stmt-row.agentA, .stmt-row.agentB{padding-left:0;padding-right:0;}
-  /* No room for a side-by-side split at this width, presenting or not. */
-  #app-shell.presentation .stmt-split{display:block;}
-  #app-shell.presentation .stmt.agentA .stmt-visual,
-  #app-shell.presentation .stmt.agentB .stmt-visual{margin:0 20px 20px;}
+  /* No room beside the card at this width, presenting or not: the panel
+     wraps under it and both go full width. */
+  #app-shell.presentation .stmt-row{flex-wrap:wrap;row-gap:20px;}
+  #app-shell.presentation .stmt-row.has-visual > .stmt{width:100%;}
+  /* min-width is released with the basis: below 760px the row is narrower
+     than the 280px floor the wide layout uses to keep the panel legible. */
+  #app-shell.presentation .stmt-row > .stmt-visual,
+  #app-shell.presentation .stmt-row.agentB > .stmt-visual{flex:1 1 100%;order:0;min-width:0;}
 }

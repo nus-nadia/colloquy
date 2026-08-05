@@ -214,12 +214,16 @@ An optional generated infographic accompanying each statement. It is a **sixth**
 
 ### Placement
 
-The panel lives inside the card, below the meta bar, as a sibling of the body inside a `.stmt-split` wrapper. It never sits in the transcript gutter: at 1120px with a 520px card there is no room beside the text that doesn't cross the centre spine, and the spine is the debate-floor aisle.
+The panel's parent **changes with the mode**. It is never allowed to take width away from the statement text: either it stacks below the text, or it goes in whitespace the text was not using.
 
-- **Normal mode** — `.stmt-split` is a block; the panel **stacks below the body** at full card width. Normal mode is the instructor console, never projected, so the vertical cost is acceptable and the 520px card is unchanged.
-- **Presentation mode** — `.stmt-split` becomes a flex row with a 40px gap; the body regains `max-width: 62ch` and the panel takes `flex: 0 0 clamp(320px, 30%, 460px)`. This is the mode the panel is designed for, and it *pays for its own space*: the presentation card is ~78% wide with an unbounded body, running ~85–90 characters per line — well past the 62–66ch ceiling §4 sets. Splitting the card fixes the measure while adding the graphic.
+- **Normal mode** — the panel lives *inside* the card, below the body, as a sibling of it inside the `.stmt-split` wrapper (a block here), at full card width. Normal mode is the instructor console, never projected, so the vertical cost is acceptable and the 520px card is unchanged. There is no usable gutter at 1120px anyway.
+- **Presentation mode** — the panel is **lifted out of the card** into the row's empty gutter, as a sibling of `.stmt` inside `.stmt-row`, taking `flex: 1 1 0` with a `280px` floor: it claims *all* the width the card leaves, out to the transcript's own 5% page gutter, rather than a capped slice of it. The card keeps the whole of its own width for text; only a row that actually carries a visible panel (`.has-visual`) narrows to `58%` to open the gutter, so a visuals-off debate presents exactly as it did before the feature existed. A `.has-visual` row also drops the 6% outboard padding the bare rows keep — that inset is precisely the space the panel wants, and on a row without a panel it is the only thing stopping a lone card from stretching across the whole projector.
 
-The panel always sits on the card's **outer** edge, away from the spine: `row` for Agent A (left column), `row-reverse` for Agent B. This mirrors the clipped-corner treatment and keeps the two cards reading as dog-eared pages turned outward.
+  Because the width is uncapped, the panel's declared 3:2 would drive its height past the bottom of a 16:9 screen at wide aspect ratios. The image is therefore capped at `72vh`: the ratio is allowed to break, the width still fills the row, and `object-fit: cover` crops rather than overflowing, so a statement and its visual stay on one screen. The pending/failed placeholder is capped identically, or it would reserve a taller box than the image that replaces it.
+
+In presentation mode the panel sits on the card's **inboard** edge — right of Agent A (left column), left of Agent B — because that is where the unused whitespace is. It therefore **crosses the centre spine**, and that is intended: the spine is a hairline painted behind the row (`z-index: 0` against the row's `1`), so the opaque panel simply covers it for the length of one statement and the aisle reappears in the gaps between turns. The dog-eared clipped corner stays outboard and continues to do the mirroring work §4 assigns it; the panel is not an identity channel and does not need to mirror.
+
+Implementation note: the panel cannot merely overflow the card in presentation mode. `.stmt` carries a `clip-path` for its clipped corner, which clips the entire subtree — an overflowing child is painted away, absolutely positioned or not. So the figure genuinely changes parents (`syncVisualMount()` in `public/app.js`), one node moved rather than two nodes duplicated.
 
 ### Treatment
 
