@@ -497,6 +497,9 @@ const endBtn = document.getElementById('end-btn');
 const downloadBtn = document.getElementById('download-btn');
 const presentationBtn = document.getElementById('presentation-btn');
 const jumpPill = document.getElementById('jump-pill');
+const homeBtn = document.getElementById('home-btn');
+const leaveDialog = document.getElementById('leave-dialog');
+const leaveDialogCopy = document.getElementById('leave-dialog-copy');
 
 // ---------------------------------------------------------------
 // Setup view wiring
@@ -750,6 +753,62 @@ function showStageView() {
   setupView.classList.add('hidden');
   stageView.classList.remove('hidden');
 }
+
+function showSetupView() {
+  state.view = 'setup';
+  state.debateId = null;
+  state.config = null;
+  state.transcript = [];
+  state.liveTurn = null;
+  state.sessionState = 'configured';
+  state.lastError = null;
+  state.pinnedToLive = true;
+  state.canModerate = false;
+  transcriptBody.innerHTML = '';
+  appShell.classList.remove('can-moderate');
+  hideJumpPill();
+  // Drop ?debate=<id> so a reload lands back on setup rather than re-joining.
+  history.replaceState(null, '', location.pathname);
+  stageView.classList.add('hidden');
+  setupView.classList.remove('hidden');
+  window.scrollTo({ top: 0 });
+}
+
+// The session itself is left on the server (it stays joinable at ?debate=<id>),
+// but a running one is paused first so it can't keep spending tokens with
+// nobody watching.
+async function leaveDebate() {
+  const id = state.debateId;
+  if (id && state.sessionState === 'running') {
+    try {
+      await fetch(`/api/debates/${id}/pause`, { method: 'POST' });
+    } catch (err) {
+      console.warn('Could not pause the debate on the way out.', err);
+    }
+  }
+  if (state.eventSource) {
+    state.eventSource.close();
+    state.eventSource = null;
+  }
+  if (state.presentation) togglePresentationMode(false);
+  showSetupView();
+}
+
+const LEAVE_COPY_LIVE = 'This debate is still in progress. Leaving pauses it and clears the stage so you can configure a new one — download the transcript first if you need it.';
+const LEAVE_COPY_FINISHED = 'The stage will be cleared and you\'ll go back to the configuration page — download the transcript first if you need it.';
+
+homeBtn.addEventListener('click', () => {
+  leaveDialogCopy.textContent =
+    state.sessionState === 'finished' ? LEAVE_COPY_FINISHED : LEAVE_COPY_LIVE;
+  leaveDialog.returnValue = '';
+  leaveDialog.showModal();
+});
+
+// Both buttons are form[method=dialog] submits, so cancelling, Esc and
+// confirming all land here; only the confirm button sets "leave".
+leaveDialog.addEventListener('close', () => {
+  if (leaveDialog.returnValue === 'leave') leaveDebate();
+});
 
 // ---------------------------------------------------------------
 // SSE
@@ -1475,6 +1534,8 @@ document.addEventListener('keydown', (e) => {
   const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   if (typing) return;
   if (state.view !== 'stage') return;
+  // The leave dialog owns the keyboard while it's up (Esc dismisses it).
+  if (leaveDialog.open) return;
 
   if (e.code === 'Space') {
     e.preventDefault();

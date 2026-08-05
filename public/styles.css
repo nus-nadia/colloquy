@@ -98,6 +98,10 @@ button{font:inherit;}
 }
 .wordmark{font-family:var(--font-sans);font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--ink-primary);}
 .masthead-meta{font-family:var(--font-sans);font-size:11px;color:var(--ink-tertiary);}
+/* Stage-view wordmark doubles as the way back to setup; strip the button
+   chrome so it still reads as the masthead rather than a control. */
+.wordmark-btn{background:none;border:none;padding:0;cursor:pointer;letter-spacing:.14em;}
+.wordmark-btn:hover{text-decoration:underline;text-underline-offset:3px;}
 
 /* ---------- Stage header ---------- */
 .stage-header{
@@ -347,6 +351,19 @@ button{font:inherit;}
 .btn-secondary:disabled{color:var(--ink-tertiary);border-color:var(--rule-hairline);cursor:not-allowed;background:transparent;}
 .btn-quiet{background:transparent;color:var(--state-error-700);border:none;padding:10px 6px;text-decoration:none;}
 .btn-quiet:hover{text-decoration:underline;}
+
+/* ---------- Confirmation dialog ---------- */
+.confirm-dialog{
+  border:1px solid var(--rule-strong);border-radius:3px;padding:0;
+  background:var(--bg-surface);color:var(--ink-primary);
+  max-width:min(440px,calc(100vw - 48px));
+  box-shadow:0 18px 44px rgba(33,28,21,.28);
+}
+.confirm-dialog::backdrop{background:var(--bg-scrim);}
+.confirm-card{padding:26px 28px 22px;}
+.confirm-title{font-family:var(--font-serif);font-weight:700;font-size:21px;margin:0 0 10px;}
+.confirm-copy{font-family:var(--font-sans);font-size:14px;line-height:1.5;color:var(--ink-secondary);margin:0 0 22px;}
+.confirm-actions{display:flex;justify-content:flex-end;gap:10px;}
 
 /* ---------- Jump-to-live pill ---------- */
 .jump-pill{

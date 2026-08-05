@@ -159,7 +159,7 @@
   <div id="app-shell">
 
     <div class="masthead">
-      <span class="wordmark">COLLOQUY</span>
+      <button type="button" class="wordmark wordmark-btn" id="home-btn" title="Back to debate setup">COLLOQUY</button>
       <span class="masthead-meta">Instructor console hidden on projector output</span>
     </div>
 
@@ -220,6 +220,18 @@
     </footer>
   </div>
 </div>
+
+<!-- Confirmation shown when the masthead wordmark is used to leave the stage. -->
+<dialog class="confirm-dialog" id="leave-dialog">
+  <form method="dialog" class="confirm-card">
+    <h2 class="confirm-title">Leave this debate?</h2>
+    <p class="confirm-copy" id="leave-dialog-copy"></p>
+    <div class="confirm-actions">
+      <button type="submit" value="cancel" class="btn btn-secondary" id="leave-cancel-btn">Stay here</button>
+      <button type="submit" value="leave" class="btn btn-primary" id="leave-confirm-btn">Leave debate</button>
+    </div>
+  </form>
+</dialog>
 
 <button class="jump-pill" id="jump-pill" type="button">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M6 13l6 6 6-6"></path></svg>
