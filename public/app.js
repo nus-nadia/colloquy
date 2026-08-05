@@ -489,7 +489,6 @@ const roundTicksEl = document.getElementById('round-ticks');
 const statePillEl = document.getElementById('state-pill');
 const playbillEl = document.getElementById('playbill');
 const transcriptBody = document.getElementById('transcript-body');
-const controlsBar = document.getElementById('controls-bar');
 const startPauseBtn = document.getElementById('start-pause-btn');
 const nextBtn = document.getElementById('next-btn');
 const nextKbdHint = document.getElementById('next-kbd-hint');
@@ -1370,7 +1369,7 @@ let injectExpanded = false;
 
 function updateModeratorInjectUI() {
   const hasStatements = state.transcript.some((e) => e.type !== 'moderator');
-  const visible = state.canModerate && hasStatements && !state.presentation;
+  const visible = state.canModerate && hasStatements;
   let row = document.getElementById('mod-inject');
   if (!visible) {
     if (row) row.remove();
@@ -1497,11 +1496,13 @@ jumpPill.addEventListener('click', () => {
 
 let autoHideTimer = null;
 
+// The idle flag lives on the shell, not the controls bar: the moderator
+// affordances scattered through the transcript fade with the same timer.
 function resetAutoHideTimer() {
   if (!state.presentation) return;
-  controlsBar.classList.remove('auto-hide');
+  appShell.classList.remove('auto-hide');
   clearTimeout(autoHideTimer);
-  autoHideTimer = setTimeout(() => controlsBar.classList.add('auto-hide'), 3000);
+  autoHideTimer = setTimeout(() => appShell.classList.add('auto-hide'), 3000);
 }
 
 function togglePresentationMode(force) {
@@ -1515,7 +1516,7 @@ function togglePresentationMode(force) {
   } else {
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     clearTimeout(autoHideTimer);
-    controlsBar.classList.remove('auto-hide');
+    appShell.classList.remove('auto-hide');
   }
 }
 
