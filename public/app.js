@@ -652,13 +652,19 @@ function populateVisualProviderSelect() {
   applyVisualProviderDefaults();
 }
 
-// Both model fields default to the adapter's own defaultModel, so there is
-// always a known-good value in each even before the instructor touches them.
+// The two fields default from two different rosters, because they name two
+// different kinds of model. The image model is the visual adapter's own
+// defaultModel. The director, though, runs over the *text*-provider contract
+// (see _generateVisual() in server/debate.js), so it defaults to the text
+// adapter of the same vendor — openai -> gpt-5.6-luna, not gpt-image-2. It
+// falls back to the visual adapter's default only for a vendor that has no
+// text adapter, which would otherwise leave the field empty.
 function applyVisualProviderDefaults() {
   const provider = VISUAL_PROVIDERS.find((p) => p.id === visualProvider.value);
   if (provider) {
+    const textProvider = state.providers.find((p) => p.id === provider.id);
     visualImageModel.value = provider.defaultModel || '';
-    visualDirectorModel.value = provider.defaultModel || '';
+    visualDirectorModel.value = textProvider?.defaultModel || provider.defaultModel || '';
   }
   visualProviderHint.classList.toggle('hidden', !provider || provider.configured);
 }
@@ -1771,7 +1777,12 @@ document.addEventListener('keydown', (e) => {
 (async function init() {
   updateBeginNote();
 
-  await Promise.all([loadStances(), loadProviders(), loadVisualProviders()]);
+  // loadVisualProviders() runs after loadProviders(), not alongside it:
+  // applyVisualProviderDefaults() reads state.providers to default the
+  // director model, and an empty roster there would silently fall back to the
+  // image model's name.
+  await Promise.all([loadStances(), loadProviders()]);
+  await loadVisualProviders();
 
   const params = new URLSearchParams(location.search);
   const existingId = params.get('debate');
