@@ -63,10 +63,22 @@ function poolFor(system) {
   // *critically*...") is identical for both agents and would otherwise
   // false-match skeptic-flavored keywords (e.g. "critic" inside
   // "critically") for every stance, always picking the same pool.
+  //
+  // Every scenario in server/prompts/ must therefore keep this marker on a
+  // line of its OWN. `socratic` originally ran it inline ("...and your assigned
+  // analytical stance is: X. If your stance is that of the teacher...") and the
+  // capture then swallowed both role words, matching `student` for the teacher
+  // agent too and putting both agents in one voice. Splitting the line is what
+  // fixes that; do not "relax" this regex to accommodate an inline variant.
   const match = (system || '').match(/your assigned analytical stance:\s*([^\n]+)/i);
   const stanceLine = (match ? match[1] : system || '').toLowerCase();
-  if (/\bskeptic|\bprobe|reproducib|generaliz|\bcritic\b|criticiz|critique|advers|\brisk|examiner|\bethic/.test(stanceLine)) return SKEPTIC_TURNS;
-  if (/champion|defend|supporter|advocate|adoption|contribution/.test(stanceLine)) return DEFENDER_TURNS;
+  // Question-asking roles read onto the skeptic pool and explaining roles onto
+  // the defender pool. That is not a perfect fit for a tutorial — both pools
+  // are debate prose — but it keeps the two mock agents in *different* voices,
+  // which is what makes an offline socratic run legible as a two-party
+  // exchange rather than one voice talking to itself.
+  if (/\bskeptic|\bprobe|reproducib|generaliz|\bcritic\b|criticiz|critique|advers|\brisk|examiner|\bethic|\bstudent|aspiring|\blearner/.test(stanceLine)) return SKEPTIC_TURNS;
+  if (/champion|defend|supporter|advocate|adoption|contribution|\bteacher|knowledgeable|\bmentor/.test(stanceLine)) return DEFENDER_TURNS;
   // Fallback: deterministic split by system-prompt length so the same
   // agent always lands on the same pool for the life of the debate.
   return system && system.length % 2 === 0 ? SKEPTIC_TURNS : DEFENDER_TURNS;
@@ -78,9 +90,11 @@ function poolFor(system) {
 // stance: by regex-matching one distinctive line of the system prompt.
 //
 // COUPLING: this literal is the opening of buildVisualDirectorPrompt() in
-// server/prompts.js. Reword it there and this falls through to a debate turn,
-// which the JSON parser rejects — every mock visual would then land on the
-// fallback archetype, silently making the offline pipeline untestable.
+// server/prompts/visuals.js (shared across scenarios — not per-scenario, so
+// one literal covers them all). Reword it there and this falls through to a
+// debate turn, which the JSON parser rejects — every mock visual would then
+// land on the fallback archetype, silently making the offline pipeline
+// untestable.
 const DIRECTOR_MARKER = /you are the visual director/i;
 
 // One canned director response per archetype, cycled deterministically by the

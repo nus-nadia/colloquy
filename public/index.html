@@ -32,13 +32,13 @@
     </div>
 
     <section class="setup-section">
-      <h2 class="setup-heading">The paper</h2>
+      <h2 class="setup-heading" id="source-heading">The paper</h2>
       <div class="field">
         <label class="field-label" for="paper-title">Title</label>
         <input class="field-input" type="text" id="paper-title" placeholder="e.g. Emergent Coordination in Decentralized Multi-Agent Systems">
       </div>
       <div class="field">
-        <label class="field-label" for="paper-text">Paper text</label>
+        <label class="field-label" for="paper-text" id="source-text-label">Paper text</label>
         <textarea class="field-input" id="paper-text" placeholder="Paste the abstract, or the full paper text, here..."></textarea>
         <p class="field-error hidden" id="paper-text-error">Paper text can't be empty.</p>
         <div class="load-file-row">
@@ -198,7 +198,7 @@
 
     <header class="stage-header">
       <div>
-        <p class="paper-kicker">Paper under debate</p>
+        <p class="paper-kicker" id="stage-kicker">Paper under debate</p>
         <h1 class="paper-title" id="stage-paper-title"></h1>
       </div>
       <div class="header-right">

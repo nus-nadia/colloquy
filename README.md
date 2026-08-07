@@ -49,6 +49,39 @@ Colloquy is a small Express server (`server/index.js`) that holds debate session
 
 Because the message array is rebuilt from the transcript on every turn, a human moderator can rewrite history between turns (see **Moderating a debate**): edited statements and injected moderator entries flow into every subsequent turn automatically. Moderator entries reach the models as `user` messages prefixed `MODERATOR:`, and consecutive same-role messages are merged before an adapter sees them, so the strictly-alternating message contract below still holds. Moderation changes fan out live as `entry_edited` / `moderator_added` SSE events, and reconnecting tabs pick them up through the normal `snapshot`.
 
+## Scenarios
+
+A **scenario** is the prompt shape a debate runs under: the system prompt, the stance presets offered for it, the moderator notes, and a few UI labels. Three ship today:
+
+| `?scenario=` | What it is |
+|---|---|
+| `classroom-debate` *(default)* | Supporter vs. adversary on a research paper, grounded in specific sections and figures, pitched at undergraduates. Every turn but the last ends with a challenge to the opponent. |
+| `polarised-debate` | The same two-sided shape, but both agents deliberately overshoot — the supporter oversells, the adversary overcorrects — so a class can see the two poles clearly. Lower reading level; each turn ends with a question to the audience. |
+| `socratic` | Not a debate: an asymmetric teacher↔student dialogue. The teacher explains with analogies, the student asks eager, naive, practical questions and doesn't explain back. Stances are `teacher`/`student`. |
+
+Pick one by adding `?scenario=<id>` to the app URL. It is deliberately not a visible control yet — the roster is served whole by `GET /api/scenarios`, so promoting it to a dropdown on the setup form is a small frontend change. An unknown id quietly falls back to `classroom-debate`.
+
+Stance presets are **scenario-scoped**, not global: `socratic` offers teacher/student, `polarised-debate` drops the mimic-student, and a stance's `text` is written against that scenario's system prompt. The chosen scenario is stored on the session, so it survives a reload and reaches any tab joining a `?debate=<id>` link.
+
+### Adding a scenario
+
+Add one module under `server/prompts/` that default-exports the shape below, then add one import and one line to `SCENARIOS` in `server/prompts/index.js` — the same pattern as provider adapters:
+
+```js
+export default {
+  id: 'my-scenario',                  // what ?scenario= takes
+  label: 'My scenario',
+  stances: [{ id, label, text }, …],  // include a { id: 'custom', text: '' } entry
+  labels: { sourceHeading, sourceTextLabel, sourceTextPlaceholder, sourceTextError, stageKicker },
+  buildSystemPrompt({ name, opponentName, stance, paper, wordTarget }) { … },
+  openingModeratorMessage({ opponentName }) { … },
+  finalRoundModeratorNote() { … },
+  moderatorInterjection,              // import from './moderator.js' — do not redefine
+};
+```
+
+Every `labels` key is optional; omitted ones leave the markup's own text alone. Two constraints are load-bearing: keep the `MODERATOR:` marker (import `moderatorInterjection` rather than writing your own), and keep `Your assigned analytical stance: <text>` on a line of its own — the Mock provider parses that line to pick each agent a distinct voice, which is what makes the offline demo legible. The turn-visual prompts in `server/prompts/visuals.js` are shared across scenarios and are not part of this contract.
+
 ## Adding a provider
 
 Every provider is a small adapter module under `server/providers/` that default-exports this contract:
@@ -94,7 +127,7 @@ Register it in `server/visuals/index.js` and it appears in `GET /api/visual-prov
 
 - `GET /api/providers`
 - `GET /api/visual-providers` — the `server/visuals/` adapter list, used to build the setup form's visual-provider dropdown
-- `GET /api/stances` — the `STANCE_PRESETS` list from `server/prompts.js`, used to build the setup form's stance dropdown
+- `GET /api/scenarios` — the scenario roster from `server/prompts/`, each entry carrying its own stance presets and UI label overrides; used to build the setup form's stance dropdown and copy
 - `POST /api/debates`
 - `GET /api/debates/:id/events` (SSE)
 - `POST /api/debates/:id/start` · `/pause` · `/next` · `/stop`

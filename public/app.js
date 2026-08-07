@@ -1,10 +1,11 @@
 // Colloquy frontend — vanilla JS, no build step, no frameworks.
 'use strict';
 
-// Stance presets are fetched from GET /api/stances at startup, so
-// server/prompts.js is the single source of truth for ids, labels, and
-// stance text. CUSTOM_ONLY_STANCES is the degraded fallback if that
-// request fails: the free-text stance field alone still works.
+// Scenarios are fetched from GET /api/scenarios at startup, so server/prompts/
+// is the single source of truth for scenario ids, their stance presets, and
+// their UI label overrides. The active scenario comes from ?scenario=<id> and
+// falls back to the first the server lists. CUSTOM_ONLY_STANCES is the degraded
+// fallback if that request fails: the free-text stance field alone still works.
 const CUSTOM_ONLY_STANCES = [{ id: 'custom', label: 'Custom…', text: '' }];
 let STANCE_PRESETS = CUSTOM_ONLY_STANCES;
 
@@ -434,6 +435,10 @@ function appendCaret(container) {
 const state = {
   view: 'setup',
   providers: [],
+  // The full scenario roster from GET /api/scenarios, and the one currently
+  // selected. `scenario` drives both the stance dropdown and the UI labels.
+  scenarios: [],
+  scenario: null,
   debateId: null,
   config: null,
   transcript: [],
@@ -459,6 +464,9 @@ const setupErrorCopy = document.getElementById('setup-error-copy');
 const paperTitleInput = document.getElementById('paper-title');
 const paperTextInput = document.getElementById('paper-text');
 const paperTextError = document.getElementById('paper-text-error');
+// Scenario-overridable copy — see applyScenarioLabels().
+const sourceHeading = document.getElementById('source-heading');
+const sourceTextLabel = document.getElementById('source-text-label');
 const loadFileBtn = document.getElementById('load-file-btn');
 const fileInput = document.getElementById('file-input');
 
@@ -494,6 +502,7 @@ const visualDirectorModelError = document.getElementById('visual-director-model-
 
 const appShell = document.getElementById('app-shell');
 const stagePaperTitle = document.getElementById('stage-paper-title');
+const stageKicker = document.getElementById('stage-kicker');
 const roundValueEl = document.getElementById('round-value');
 const roundTicksEl = document.getElementById('round-ticks');
 const statePillEl = document.getElementById('state-pill');
@@ -555,26 +564,61 @@ function wireStanceSelect(prefix) {
   });
 }
 
-// Agent A takes the first preset, Agent B the second, so the two sides
-// start opposed whatever prompts.js currently lists.
-async function loadStances() {
-  try {
-    const res = await fetch('/api/stances');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const presets = await res.json();
-    const usable = Array.isArray(presets)
-      ? presets.filter((s) => s && typeof s.id === 'string' && typeof s.label === 'string')
-      : [];
-    if (usable.length) STANCE_PRESETS = usable;
-  } catch (err) {
-    console.error('Could not load stance presets; falling back to custom only.', err);
+// Apply a scenario's UI label overrides. Every key is optional: a scenario
+// that omits one leaves the markup's own text in place, so index.html stays
+// readable on its own and adding a label is a server-side change.
+function applyScenarioLabels(labels) {
+  if (!labels) return;
+  const setText = (el, value) => {
+    if (el && typeof value === 'string') el.textContent = value;
+  };
+  setText(sourceHeading, labels.sourceHeading);
+  setText(sourceTextLabel, labels.sourceTextLabel);
+  setText(paperTextError, labels.sourceTextError);
+  setText(stageKicker, labels.stageKicker);
+  if (typeof labels.sourceTextPlaceholder === 'string') {
+    paperTextInput.placeholder = labels.sourceTextPlaceholder;
   }
+}
+
+// Agent A takes the first preset, Agent B the second, so the two sides start
+// opposed whatever the active scenario lists. Stance presets are scenario-
+// scoped — `socratic` offers teacher/student, the debate scenarios offer
+// supporter/adversary — so this runs after the scenario is resolved.
+function applyScenario(scenario) {
+  state.scenario = scenario;
+  STANCE_PRESETS = scenario && scenario.stances && scenario.stances.length
+    ? scenario.stances
+    : CUSTOM_ONLY_STANCES;
+  applyScenarioLabels(scenario && scenario.labels);
 
   populateStanceSelect(agentAStancePreset);
   populateStanceSelect(agentBStancePreset);
   const defaults = STANCE_PRESETS.filter((s) => s.id !== 'custom');
   selectStance('A', (defaults[0] || STANCE_PRESETS[0]).id);
   selectStance('B', (defaults[1] || defaults[0] || STANCE_PRESETS[0]).id);
+}
+
+// The scenario roster arrives in one request and is cached, so switching
+// scenarios (today only via ?scenario=, later via a dropdown) costs no fetch.
+// An unknown or absent id falls back to the first scenario the server lists,
+// which is the same default the server itself applies.
+async function loadScenarios() {
+  try {
+    const res = await fetch('/api/scenarios');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    const usable = Array.isArray(list)
+      ? list.filter((s) => s && typeof s.id === 'string' && Array.isArray(s.stances))
+      : [];
+    if (usable.length) state.scenarios = usable;
+  } catch (err) {
+    console.error('Could not load scenarios; falling back to custom stances only.', err);
+  }
+
+  const wanted = new URLSearchParams(location.search).get('scenario');
+  const scenario = state.scenarios.find((s) => s.id === wanted) || state.scenarios[0] || null;
+  applyScenario(scenario);
 }
 
 function populateProviderSelect(selectEl, hintEl) {
@@ -761,6 +805,7 @@ function buildConfigFromForm() {
       title: paperTitleInput.value.trim(),
       text: paperTextInput.value.trim(),
     },
+    scenarioId: state.scenario ? state.scenario.id : undefined,
     agents: [
       {
         name: agentAName.value.trim() || 'Agent A',
@@ -842,7 +887,12 @@ setupForm.addEventListener('submit', async (e) => {
     }
     const { id } = await res.json();
     state.debateId = id;
-    history.replaceState(null, '', `?debate=${id}`);
+    // Rewrite `debate` in place rather than replacing the whole query string:
+    // a plain `?debate=<id>` would drop the `?scenario=` the user arrived with,
+    // so leaving the stage back to setup would silently revert the scenario.
+    const params = new URLSearchParams(location.search);
+    params.set('debate', id);
+    history.replaceState(null, '', `?${params}`);
     await fetch(`/api/debates/${id}/start`, { method: 'POST' });
     showStageView();
     connectSSE(id);
@@ -876,8 +926,16 @@ function showSetupView() {
   transcriptBody.innerHTML = '';
   appShell.classList.remove('can-moderate');
   hideJumpPill();
-  // Drop ?debate=<id> so a reload lands back on setup rather than re-joining.
-  history.replaceState(null, '', location.pathname);
+  // Drop ?debate=<id> so a reload lands back on setup rather than re-joining —
+  // but keep ?scenario=, which describes the form the user is returning to.
+  const params = new URLSearchParams(location.search);
+  params.delete('debate');
+  const query = params.toString();
+  history.replaceState(null, '', query ? `${location.pathname}?${query}` : location.pathname);
+  // Joining someone else's ?debate= link applies that debate's labels; restore
+  // the ones belonging to the scenario this setup form is actually configured
+  // for. Stance presets never changed, so only the labels need putting back.
+  applyScenarioLabels(state.scenario && state.scenario.labels);
   stageView.classList.add('hidden');
   setupView.classList.remove('hidden');
   window.scrollTo({ top: 0 });
@@ -957,6 +1015,11 @@ function providerLabel(providerId) {
 
 function onSnapshot(snap) {
   state.config = snap.config;
+  // The session is authoritative about its own scenario: a tab that joined via
+  // a bare ?debate=<id> link never saw the ?scenario= the debate was created
+  // with, so take the labels from the config rather than from this tab's URL.
+  const sessionScenario = state.scenarios.find((s) => s.id === snap.config.scenarioId);
+  if (sessionScenario) applyScenarioLabels(sessionScenario.labels);
   state.transcript = snap.transcript;
   state.liveTurn = snap.liveTurn;
   state.sessionState = snap.state;
@@ -1781,7 +1844,7 @@ document.addEventListener('keydown', (e) => {
   // applyVisualProviderDefaults() reads state.providers to default the
   // director model, and an empty roster there would silently fall back to the
   // image model's name.
-  await Promise.all([loadStances(), loadProviders()]);
+  await Promise.all([loadScenarios(), loadProviders()]);
   await loadVisualProviders();
 
   const params = new URLSearchParams(location.search);
