@@ -489,6 +489,7 @@ const turnsSelect = document.getElementById('turns-select');
 const advanceModeSegmented = document.getElementById('advance-mode-segmented');
 const lengthSegmented = document.getElementById('length-segmented');
 const beginNote = document.getElementById('begin-note');
+const scenarioPill = document.getElementById('scenario-pill');
 
 const visualsSettings = document.getElementById('visuals-settings');
 const visualsSegmented = document.getElementById('visuals-segmented');
@@ -585,12 +586,28 @@ function applyScenarioLabels(labels) {
 // opposed whatever the active scenario lists. Stance presets are scenario-
 // scoped — `socratic` offers teacher/student, the debate scenarios offer
 // supporter/adversary — so this runs after the scenario is resolved.
+// Name the active scenario on the begin row. Shown for every scenario, the
+// default included: it is the setting with the widest reach on this form —
+// it decides the stance list, the prompt, and the copy around it — so leaving
+// it unlabelled would make the most consequential choice the only silent one.
+// Hidden only when no scenario resolved at all (the /api/scenarios fetch
+// failed), since an empty pill would claim less than nothing.
+function updateScenarioPill(scenario) {
+  scenarioPill.classList.toggle('hidden', !scenario);
+  if (!scenario) return;
+  scenarioPill.textContent = scenario.label || scenario.id;
+  // The id is what ?scenario= takes; surfacing it on hover saves a round trip
+  // to the source when someone is switching variants.
+  scenarioPill.title = `Prompt scenario — ?scenario=${scenario.id}`;
+}
+
 function applyScenario(scenario) {
   state.scenario = scenario;
   STANCE_PRESETS = scenario && scenario.stances && scenario.stances.length
     ? scenario.stances
     : CUSTOM_ONLY_STANCES;
   applyScenarioLabels(scenario && scenario.labels);
+  updateScenarioPill(scenario);
 
   populateStanceSelect(agentAStancePreset);
   populateStanceSelect(agentBStancePreset);

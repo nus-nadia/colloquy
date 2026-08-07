@@ -59,7 +59,7 @@ A **scenario** is the prompt shape a debate runs under: the system prompt, the s
 | `polarised-debate` | The same two-sided shape, but both agents deliberately overshoot — the supporter oversells, the adversary overcorrects — so a class can see the two poles clearly. Lower reading level; each turn ends with a question to the audience. |
 | `socratic` | Not a debate: an asymmetric teacher↔student dialogue. The teacher explains with analogies, the student asks eager, naive, practical questions and doesn't explain back. Stances are `teacher`/`student`. |
 
-Pick one by adding `?scenario=<id>` to the app URL. It is deliberately not a visible control yet — the roster is served whole by `GET /api/scenarios`, so promoting it to a dropdown on the setup form is a small frontend change. An unknown id quietly falls back to `classroom-debate`.
+Pick one by adding `?scenario=<id>` to the app URL. An unknown id quietly falls back to `classroom-debate`. The setup form's begin row names the active scenario in a small pill (hover it for the `?scenario=` id), so the choice is always visible even though *selecting* one stays URL-only for now — the roster is served whole by `GET /api/scenarios`, so promoting it to a dropdown is a small frontend change.
 
 Stance presets are **scenario-scoped**, not global: `socratic` offers teacher/student, `polarised-debate` drops the mimic-student, and a stance's `text` is written against that scenario's system prompt. The chosen scenario is stored on the session, so it survives a reload and reaches any tab joining a `?debate=<id>` link.
 
