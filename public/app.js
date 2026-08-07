@@ -482,6 +482,16 @@ const advanceModeSegmented = document.getElementById('advance-mode-segmented');
 const lengthSegmented = document.getElementById('length-segmented');
 const beginNote = document.getElementById('begin-note');
 
+const visualsSettings = document.getElementById('visuals-settings');
+const visualsSegmented = document.getElementById('visuals-segmented');
+const visualsFields = document.getElementById('visuals-fields');
+const visualProvider = document.getElementById('visual-provider');
+const visualProviderHint = document.getElementById('visual-provider-hint');
+const visualImageModel = document.getElementById('visual-image-model');
+const visualDirectorModel = document.getElementById('visual-director-model');
+const visualImageModelError = document.getElementById('visual-image-model-error');
+const visualDirectorModelError = document.getElementById('visual-director-model-error');
+
 const appShell = document.getElementById('app-shell');
 const stagePaperTitle = document.getElementById('stage-paper-title');
 const roundValueEl = document.getElementById('round-value');
@@ -605,6 +615,85 @@ async function loadProviders() {
   if (bProvider) agentBModel.value = bProvider.defaultModel;
 }
 
+// Visual adapters are a separate roster from the debate providers (same
+// shape, different endpoint), so they get their own list rather than a
+// filtered view of state.providers.
+let VISUAL_PROVIDERS = [];
+
+function getVisualsEnabled() {
+  return visualsSegmented.querySelector('button.active')?.dataset.value === 'on';
+}
+
+// Reads the segmented control and shows/hides the three dependent fields, so
+// the toggle and the fields can never disagree about whether visuals are on.
+function syncVisualsFields() {
+  visualsFields.classList.toggle('hidden', !getVisualsEnabled());
+}
+
+function setVisualsEnabled(on) {
+  for (const b of visualsSegmented.querySelectorAll('button')) {
+    b.classList.toggle('active', (b.dataset.value === 'on') === on);
+  }
+  syncVisualsFields();
+}
+
+function populateVisualProviderSelect() {
+  visualProvider.innerHTML = '';
+  for (const p of VISUAL_PROVIDERS) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.configured ? p.label : `${p.label} — no API key`;
+    opt.disabled = !p.configured;
+    visualProvider.appendChild(opt);
+  }
+  const preferred = VISUAL_PROVIDERS.find((p) => p.configured)
+    || VISUAL_PROVIDERS.find((p) => p.id === 'mock');
+  if (preferred) visualProvider.value = preferred.id;
+  applyVisualProviderDefaults();
+}
+
+// The two fields default from two different rosters, because they name two
+// different kinds of model. The image model is the visual adapter's own
+// defaultModel. The director, though, runs over the *text*-provider contract
+// (see _generateVisual() in server/debate.js), so it defaults to the text
+// adapter of the same vendor — openai -> gpt-5.6-luna, not gpt-image-2. It
+// falls back to the visual adapter's default only for a vendor that has no
+// text adapter, which would otherwise leave the field empty.
+function applyVisualProviderDefaults() {
+  const provider = VISUAL_PROVIDERS.find((p) => p.id === visualProvider.value);
+  if (provider) {
+    const textProvider = state.providers.find((p) => p.id === provider.id);
+    visualImageModel.value = provider.defaultModel || '';
+    visualDirectorModel.value = textProvider?.defaultModel || provider.defaultModel || '';
+  }
+  visualProviderHint.classList.toggle('hidden', !provider || provider.configured);
+}
+
+// Mirrors loadStances()'s degraded-fallback shape: if the roster can't be
+// fetched, visuals are simply not offered rather than half-offered.
+async function loadVisualProviders() {
+  try {
+    const res = await fetch('/api/visual-providers');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    const usable = Array.isArray(list)
+      ? list.filter((p) => p && typeof p.id === 'string' && typeof p.label === 'string')
+      : [];
+    if (!usable.length) throw new Error('no visual providers offered');
+    VISUAL_PROVIDERS = usable;
+  } catch (err) {
+    console.warn('Could not load visual providers; visuals disabled.', err);
+    VISUAL_PROVIDERS = [];
+    setVisualsEnabled(false);
+    visualsSettings.classList.add('hidden');
+    updateBeginNote();
+    return;
+  }
+  populateVisualProviderSelect();
+  syncVisualsFields();
+  updateBeginNote();
+}
+
 function wireSegmented(container, onChange) {
   container.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
@@ -628,7 +717,8 @@ function updateBeginNote() {
   const mode = getAdvanceMode() === 'auto' ? 'auto-advance' : 'manual advance';
   const lengthBtn = lengthSegmented.querySelector('button.active');
   const lengthLabel = (lengthBtn ? lengthBtn.textContent : 'Standard').toLowerCase();
-  beginNote.textContent = `${turns} turns · ${mode} · ${lengthLabel} length`;
+  const visuals = getVisualsEnabled() ? ' · visuals on' : '';
+  beginNote.textContent = `${turns} turns · ${mode} · ${lengthLabel} length${visuals}`;
 }
 
 loadFileBtn.addEventListener('click', () => fileInput.click());
@@ -643,16 +733,20 @@ fileInput.addEventListener('change', () => {
 turnsSelect.addEventListener('change', updateBeginNote);
 wireSegmented(advanceModeSegmented, () => {});
 wireSegmented(lengthSegmented, () => {});
+wireSegmented(visualsSegmented, syncVisualsFields);
 wireStanceSelect('A');
 wireStanceSelect('B');
 wireProviderSelect(agentAProvider, agentAModel, agentAProviderHint);
 wireProviderSelect(agentBProvider, agentBModel, agentBProviderHint);
+visualProvider.addEventListener('change', applyVisualProviderDefaults);
 
 function clearSetupErrors() {
   setupError.classList.add('hidden');
   paperTextError.classList.add('hidden');
   agentAModelError.classList.add('hidden');
   agentBModelError.classList.add('hidden');
+  visualImageModelError.classList.add('hidden');
+  visualDirectorModelError.classList.add('hidden');
 }
 
 function showSetupError(message) {
@@ -684,6 +778,12 @@ function buildConfigFromForm() {
     maxTurns: parseInt(turnsSelect.value, 10),
     autoAdvance: getAdvanceMode() === 'auto',
     wordTarget: getWordTarget(),
+    visuals: {
+      enabled: getVisualsEnabled(),
+      provider: visualProvider.value,
+      imageModel: visualImageModel.value.trim(),
+      directorModel: visualDirectorModel.value.trim(),
+    },
   };
 }
 
@@ -707,6 +807,16 @@ function validateForm(config) {
     agentBModelError.classList.remove('hidden');
     agentCardB.classList.add('invalid');
     ok = false;
+  }
+  if (config.visuals.enabled) {
+    if (!config.visuals.imageModel) {
+      visualImageModelError.classList.remove('hidden');
+      ok = false;
+    }
+    if (!config.visuals.directorModel) {
+      visualDirectorModelError.classList.remove('hidden');
+      ok = false;
+    }
   }
   return ok;
 }
@@ -824,6 +934,7 @@ function connectSSE(id) {
   es.addEventListener('done', (e) => onDone(JSON.parse(e.data)));
   es.addEventListener('entry_edited', (e) => onEntryEdited(JSON.parse(e.data)));
   es.addEventListener('moderator_added', (e) => onModeratorAdded(JSON.parse(e.data)));
+  es.addEventListener('visual_status', (e) => onVisualStatus(JSON.parse(e.data)));
   // NOTE: EventSource's native connection-failure event is also named
   // "error" — the same name our server uses for a real debate-turn
   // error. Disambiguate via presence of `.data` (only server-sent
@@ -880,6 +991,9 @@ function onTurnEnd(entry) {
   if (idx === -1) state.transcript.push(entry); else state.transcript[idx] = entry;
   state.liveTurn = null;
   finalizeStatementRow(entry);
+  // The row was built at turn_start, before any `visual` existed; the
+  // finished entry is the first payload that can carry one.
+  renderVisualPanel(entry.turn, entry.visual);
   appendBetweenTurnsDividerIfMore(entry.turn);
   updateRoundChrome();
   updateControlsUI();
@@ -907,6 +1021,16 @@ function onDone(data) {
   removeBetweenTurnsDivider();
   renderFinishedBlock(data);
   updateControlsUI();
+}
+
+// Visuals are generated after the turn ends, so status lands out of band.
+// Upsert it onto the entry (moderator entries have no `turn`, hence the
+// same filter onTurnEnd uses) so a later SSE reconnect can rebuild the
+// panel from state.transcript alone, then patch just the figure in place.
+function onVisualStatus(data) {
+  const entry = state.transcript.find((t) => t.type !== 'moderator' && t.turn === data.turn);
+  if (entry) entry.visual = data.visual;
+  renderVisualPanel(data.turn, data.visual);
 }
 
 // ---------------------------------------------------------------
@@ -1039,9 +1163,99 @@ function appendStatementRow(data) {
           <button type="button" class="mod-action" data-mod-note="${data.turn}">+ Note</button>
         </span>
       </div>
-      <div class="stmt-body" id="stmt-body-${data.turn}"></div>
+      <div class="stmt-split">
+        <div class="stmt-body" id="stmt-body-${data.turn}"></div>
+        <figure class="stmt-visual hidden" id="stmt-visual-${data.turn}"></figure>
+      </div>
     </article>`;
   transcriptBody.appendChild(row);
+  syncVisualMount(row);
+  // `data` is either a turn_start payload (no visual yet) or a finished
+  // transcript entry (which may carry one) — renderVisualPanel handles both.
+  renderVisualPanel(data.turn, data.visual);
+}
+
+// The visual panel has two mount points and changes PARENT with the mode:
+// inside the card (under .stmt-split, below the body) in normal mode, and
+// out in the row gutter beside the card when presenting. It cannot simply
+// be positioned out of the card, because .stmt carries a clip-path for its
+// clipped corner (DESIGN_SPEC §4) and clip-path clips the entire subtree —
+// an overflowing child is painted away, absolutely positioned or not.
+//
+// One figure node, one id, moved rather than duplicated, so renderVisualPanel
+// stays parent-agnostic and no image is ever requested twice.
+function syncVisualMount(row) {
+  const fig = row.querySelector('.stmt-visual');
+  if (!fig) return; // moderator rows have no panel
+  const target = state.presentation ? row : row.querySelector('.stmt-split');
+  if (target && fig.parentElement !== target) target.appendChild(fig);
+}
+
+function syncAllVisualMounts() {
+  for (const row of transcriptBody.querySelectorAll('.stmt-row')) syncVisualMount(row);
+}
+
+// Renders the generated-infographic panel for one turn from the entry's
+// `visual` object alone, so it survives every rebuild of the transcript.
+//
+// SECURITY: the <img> src is ALWAYS constructed here from the debate id and
+// turn index — never a string from model output — and every model-derived
+// string (alt text, caption, error copy) is assigned via .alt / .textContent.
+// Nothing on this path touches .innerHTML, so the panel sits entirely
+// outside renderStatementHTML()'s escape-then-whitelist invariant rather
+// than widening it.
+function renderVisualPanel(turn, visual) {
+  const fig = document.getElementById(`stmt-visual-${turn}`);
+  if (!fig) return;
+  fig.textContent = '';
+
+  const status = visual && visual.status;
+  // `has-visual` on the ROW (not the figure — fig.className is reassigned
+  // below) is what tells the presentation-mode CSS to hand the gutter to a
+  // panel and narrow the card. Rows without a panel keep the full-width
+  // card, so a visuals-off debate presents exactly as it always did.
+  const row = fig.closest('.stmt-row');
+  // Absent (visuals off) or explicitly skipped: render nothing, reserve
+  // no space. .hidden is display:none !important, so it also wins over
+  // the presentation-mode flex rules.
+  if (!status || status === 'skipped') {
+    fig.className = 'stmt-visual hidden';
+    if (row) row.classList.remove('has-visual');
+    return;
+  }
+  fig.className = `stmt-visual is-${status}`;
+  if (row) row.classList.add('has-visual');
+
+  if (status === 'ready') {
+    const img = document.createElement('img');
+    img.src = `/api/debates/${state.debateId}/visuals/${turn}`;
+    img.alt = visual.alt || 'Generated illustration of this statement';
+    img.loading = 'lazy';
+    fig.appendChild(img);
+    // `alt` is a written description of the figure, so it doubles as the
+    // caption a proceedings volume would print; `archetype` is the taxonomy
+    // token the director chose and only stands in when there is no prose.
+    const captionText = visual.alt || visual.archetype;
+    if (captionText) {
+      const caption = document.createElement('figcaption');
+      caption.textContent = captionText;
+      fig.appendChild(caption);
+    }
+    return;
+  }
+
+  // pending / failed — one quiet placeholder at the image's own aspect
+  // ratio, so nothing reflows when the picture lands. No spinner, no red
+  // (DESIGN_SPEC §5: error treatment is calm, not alarming).
+  const placeholder = document.createElement('div');
+  placeholder.className = 'stmt-visual-placeholder';
+  const note = document.createElement('span');
+  note.className = 'stmt-visual-note';
+  note.textContent = status === 'pending'
+    ? 'Illustration in progress…'
+    : (visual.error || 'Illustration unavailable for this statement.');
+  placeholder.appendChild(note);
+  fig.appendChild(placeholder);
 }
 
 function updateLiveStatementBody() {
@@ -1509,6 +1723,10 @@ function togglePresentationMode(force) {
   const next = force !== undefined ? force : !state.presentation;
   state.presentation = next;
   appShell.classList.toggle('presentation', next);
+  // The panel lives in a different parent per mode — move every existing
+  // one now rather than rebuilding the transcript, which would drop scroll
+  // position and the in-flight statement's caret.
+  syncAllVisualMounts();
   updateModeratorInjectUI();
   if (next) {
     document.documentElement.requestFullscreen?.().catch(() => {});
@@ -1559,7 +1777,12 @@ document.addEventListener('keydown', (e) => {
 (async function init() {
   updateBeginNote();
 
+  // loadVisualProviders() runs after loadProviders(), not alongside it:
+  // applyVisualProviderDefaults() reads state.providers to default the
+  // director model, and an empty roster there would silently fall back to the
+  // image model's name.
   await Promise.all([loadStances(), loadProviders()]);
+  await loadVisualProviders();
 
   const params = new URLSearchParams(location.search);
   const existingId = params.get('debate');

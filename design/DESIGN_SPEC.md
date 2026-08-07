@@ -206,6 +206,51 @@ Full transcript width, centered text, no card — just italic serif caption + th
 
 ---
 
+---
+
+## 7. Turn visual panel
+
+An optional generated infographic accompanying each statement. It is a **sixth** element of the statement block, not a sixth identity channel — it must never carry information about *which* agent is speaking, since §1's five channels are already sufficient and adding a sixth that can fail (a visual may be absent, pending, or failed) would weaken rather than strengthen them.
+
+### Placement
+
+The panel's parent **changes with the mode**. It is never allowed to take width away from the statement text: either it stacks below the text, or it goes in whitespace the text was not using.
+
+- **Normal mode** — the panel lives *inside* the card, below the body, as a sibling of it inside the `.stmt-split` wrapper (a block here), at full card width. Normal mode is the instructor console, never projected, so the vertical cost is acceptable and the 520px card is unchanged. There is no usable gutter at 1120px anyway.
+- **Presentation mode** — the panel is **lifted out of the card** into the row's empty gutter, as a sibling of `.stmt` inside `.stmt-row`, taking `flex: 1 1 0` with a `280px` floor: it claims *all* the width the card leaves, out to the transcript's own 5% page gutter, rather than a capped slice of it. The card keeps the whole of its own width for text; only a row that actually carries a visible panel (`.has-visual`) narrows to `58%` to open the gutter, so a visuals-off debate presents exactly as it did before the feature existed. A `.has-visual` row also drops the 6% outboard padding the bare rows keep — that inset is precisely the space the panel wants, and on a row without a panel it is the only thing stopping a lone card from stretching across the whole projector.
+
+  Because the width is uncapped, the panel's declared 3:2 would drive its height past the bottom of a 16:9 screen at wide aspect ratios. The image is therefore capped at `72vh`: the ratio is allowed to break, the width still fills the row, and `object-fit: cover` crops rather than overflowing, so a statement and its visual stay on one screen. The pending/failed placeholder is capped identically, or it would reserve a taller box than the image that replaces it.
+
+In presentation mode the panel sits on the card's **inboard** edge — right of Agent A (left column), left of Agent B — because that is where the unused whitespace is. It therefore **crosses the centre spine**, and that is intended: the spine is a hairline painted behind the row (`z-index: 0` against the row's `1`), so the opaque panel simply covers it for the length of one statement and the aisle reappears in the gaps between turns. The dog-eared clipped corner stays outboard and continues to do the mirroring work §4 assigns it; the panel is not an identity channel and does not need to mirror.
+
+Implementation note: the panel cannot merely overflow the card in presentation mode. `.stmt` carries a `clip-path` for its clipped corner, which clips the entire subtree — an overflowing child is painted away, absolutely positioned or not. So the figure genuinely changes parents (`syncVisualMount()` in `public/app.js`), one node moved rather than two nodes duplicated.
+
+### Treatment
+
+`--bg-surface` ground, 1px `--rule-hairline`, the same paper-lift shadow as the statement card, and **square corners** — §4's prohibition holds, the jump-to-live pill remains the only rounded shape in the app. No gradient, no glow, no frame ornament.
+
+The image is `width: 100%` at a fixed `aspect-ratio: 3/2` with `object-fit: cover`, so the panel reserves its footprint *before* the image arrives. Nothing may reflow mid-debate — a card that resizes under a reader on a projector is worse than no image.
+
+Caption (`figcaption`): sans, `--ink-secondary`, ≥14px normal / ≥18px presentation.
+
+### States
+
+| State | Treatment |
+|---|---|
+| absent (visuals off) | render nothing; reserve no space |
+| `pending` | `--bg-sunken` placeholder at the same aspect ratio, 1px hairline. No spinner. |
+| `ready` | the image + caption |
+| `failed` | same placeholder, one line of `--ink-tertiary` text |
+| `skipped` | render nothing |
+
+No spinner and no red anywhere: per §5 the app's failure treatment is calm, not alarming, and a visual failing is a non-event — the statement is still fully readable without it. The pending placeholder deliberately does not animate; §6 reserves motion for the three streaming affordances.
+
+### Generated image content
+
+The art direction is composed server-side and the generating model cannot override it. Ground `--bg-surface #FBF8F0`, linework `--ink-primary #211C15`, a single accent in the speaking agent's `-600` hue (`#7B2432` / `#21395A`), and `--state-live #A6551E` reserved for the one emphasized element. Flat vector infographic — no photography, no gradients, no 3-D, square corners, generous whitespace. Text is held to **short labels of at most three words, no more of them than the composition calls for, and none repeated**, each set large enough to read from the back of the room. Image models render in-image text unreliably, and on a projector a garbled label costs more attention than the graphic returns — but the rule must stay satisfiable: a flat "six words per image" cap contradicts the multi-row archetypes and is simply ignored.
+
+---
+
 ## Deliberate deviations / notes for the engineer
 
 - No second (dark) theme is included — the brief allowed this. Presentation mode reuses the same palette at larger scale rather than switching to dark, per the projector-contrast rationale in §1.

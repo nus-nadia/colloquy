@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 
 import { listProviders, getProvider } from './providers/index.js';
+import { listVisualProviders, getVisualProvider } from './visuals/index.js';
 import { DebateSession } from './debate.js';
 import { STANCE_PRESETS } from './prompts.js';
 
@@ -29,6 +30,12 @@ function getSessionOr404(req, res) {
 
 app.get('/api/providers', (req, res) => {
   res.json(listProviders());
+});
+
+// The image half of the turn-visual pipeline. Same shape as /api/providers,
+// different registry — a visual adapter implements a different contract.
+app.get('/api/visual-providers', (req, res) => {
+  res.json(listVisualProviders());
 });
 
 // The frontend's stance dropdown is built from this, so prompts.js stays
@@ -72,6 +79,26 @@ app.post('/api/debates', (req, res) => {
     errors.push('maxTurns must be an integer between 2 and 20.');
   }
 
+  // Turn visuals are opt-in and absent by default. When disabled, nothing else
+  // in the block is validated — the frontend is free to leave stale provider
+  // and model values in it while the checkbox is off.
+  const visualsInput = body.visuals && typeof body.visuals === 'object' ? body.visuals : {};
+  let visuals = { enabled: false, provider: null, imageModel: null, directorModel: null };
+  if (visualsInput.enabled) {
+    const visualProviderId = visualsInput.provider;
+    const visualProvider = visualProviderId ? getVisualProvider(visualProviderId) : undefined;
+    if (!visualProvider) {
+      errors.push(`Visuals: unknown visual provider "${visualProviderId}".`);
+    } else if (!visualProvider.isConfigured()) {
+      errors.push(`Visuals: provider "${visualProviderId}" is not configured (missing API key).`);
+    }
+    const imageModel = typeof visualsInput.imageModel === 'string' ? visualsInput.imageModel.trim() : '';
+    if (!imageModel) errors.push('Visuals: imageModel must not be empty.');
+    const directorModel = typeof visualsInput.directorModel === 'string' ? visualsInput.directorModel.trim() : '';
+    if (!directorModel) errors.push('Visuals: directorModel must not be empty.');
+    visuals = { enabled: true, provider: visualProvider?.id ?? null, imageModel, directorModel };
+  }
+
   if (errors.length) {
     return res.status(400).json({ error: errors.join(' ') });
   }
@@ -82,6 +109,7 @@ app.post('/api/debates', (req, res) => {
     maxTurns,
     autoAdvance: Boolean(body.autoAdvance),
     wordTarget: Number.isFinite(body.wordTarget) ? body.wordTarget : 160,
+    visuals,
   };
 
   const session = new DebateSession(config);
@@ -160,6 +188,23 @@ app.post('/api/debates/:id/moderator', (req, res) => {
     return res.status(status).json({ error: result.reason });
   }
   res.status(201).json({ ok: true, entry: result.entry });
+});
+
+// Raw bytes for one turn's generated visual. They deliberately never ride on
+// the transcript or the SSE snapshot (see DebateSession.visualBytes), so this
+// is the only way to fetch one. A given turn's image never changes once
+// generated, hence the immutable far-future cache header.
+app.get('/api/debates/:id/visuals/:turn', (req, res) => {
+  const session = getSessionOr404(req, res);
+  if (!session) return;
+  const turn = parseInt(req.params.turn, 10);
+  const stored = Number.isInteger(turn) ? session.visualBytes.get(turn) : undefined;
+  if (!stored) {
+    return res.status(404).json({ error: 'No visual for that turn.' });
+  }
+  res.setHeader('Content-Type', stored.mime);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.send(stored.bytes);
 });
 
 app.get('/api/debates/:id/transcript', (req, res) => {

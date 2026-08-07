@@ -248,6 +248,42 @@ button{font:inherit;}
 .stmt-body .katex-display > .katex{font-size:1.12em;}
 .stmt-body .katex-error{color:var(--state-error);font-family:var(--font-mono);font-size:0.88em;}
 
+/* ---------- Generated visual panel ---------- */
+/* .stmt-visual is a SIBLING of .stmt-body, never a child: .stmt-body's
+   innerHTML is replaced on every streamed token and appendCaret() descends
+   into its last element child, so a panel nested inside would be destroyed
+   each delta and would swallow the caret.
+
+   Normal mode stacks the panel below the body, inside the card, at full
+   card width — normal mode is the instructor console and the card does not
+   widen here. Presentation mode instead lifts the figure OUT of the card
+   into the row gutter beside it (see syncVisualMount() and the presentation
+   rules below), so .stmt-split never actually splits anything; it survives
+   as the in-card mount point for normal mode. */
+.stmt-split{display:block;}
+
+.stmt-visual{
+  margin:0 20px 20px;
+  background:var(--bg-surface);
+  border:1px solid var(--rule-hairline);
+  box-shadow:0 1px 2px rgba(33,28,21,.06), 0 4px 10px rgba(33,28,21,.04);
+}
+/* The aspect ratio is declared up front so the panel reserves its space
+   before the image lands — nothing reflows mid-debate. */
+.stmt-visual img{width:100%;display:block;aspect-ratio:3/2;object-fit:cover;}
+.stmt-visual figcaption{
+  font-family:var(--font-sans);font-size:14px;line-height:1.4;color:var(--ink-secondary);
+  padding:10px 12px;border-top:1px solid var(--rule-hairline);
+}
+/* pending + failed: one quiet sunken plate. No spinner, no red — §5 asks
+   for calm, not alarming. */
+.stmt-visual-placeholder{
+  aspect-ratio:3/2;background:var(--bg-sunken);
+  display:flex;align-items:center;justify-content:center;
+  padding:16px;text-align:center;
+}
+.stmt-visual-note{font-family:var(--font-sans);font-size:13px;line-height:1.45;color:var(--ink-tertiary);}
+
 /* streaming state */
 .stmt.is-live .crest-a{animation:glowA 1.8s ease-in-out infinite;}
 .stmt.is-live .crest-b{animation:glowB 1.8s ease-in-out infinite;}
@@ -409,7 +445,12 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 .agent-card-head .role{font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-tertiary);}
 
 .settings-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;}
+/* Visuals sit in their own row under the 3-column settings grid; the three
+   dependent fields reuse .settings-grid so they collapse identically. */
+.settings-visuals{margin-top:24px;padding-top:24px;border-top:1px solid var(--rule-hairline);}
+.visuals-fields{margin-top:20px;}
 .segmented{display:flex;border:1px solid var(--rule-strong);border-radius:3px;overflow:hidden;}
+.segmented-narrow{max-width:260px;}
 .segmented button{flex:1;padding:10px 6px;background:var(--bg-sunken);border:none;border-left:1px solid var(--rule-strong);
   font-family:var(--font-sans);font-size:13px;color:var(--ink-secondary);cursor:pointer;}
 .segmented button:first-child{border-left:none;}
@@ -463,7 +504,58 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 #app-shell.presentation.auto-hide .mod-action:focus-visible,
 #app-shell.presentation.auto-hide .mod-inject-toggle:focus-visible{opacity:1;pointer-events:auto;}
 
+/* Presentation mode puts the panel in the row's empty gutter, BESIDE the
+   card rather than inside it — the card is not made to share its width.
+   syncVisualMount() in app.js reparents the figure to .stmt-row for this;
+   it cannot merely overflow the card, because .stmt carries a clip-path for
+   its clipped corner (§4) and clip-path clips the whole subtree.
+
+   The gutter is the INBOARD side — right of Agent A, left of Agent B — so
+   the panel does cross the centre spine. That is deliberate here: the spine
+   is a hairline behind the row (z-index 0 vs the row's 1), so an opaque
+   panel simply covers it for the length of that turn and it reappears in
+   the gaps between statements. */
+#app-shell.presentation .stmt-row{align-items:flex-start;column-gap:32px;}
+/* The panel takes ALL the width the card leaves, rather than a capped slice:
+   flex-basis 0 + grow means "the rest of the row", so the image runs out to
+   the transcript's own 5% page gutter. */
+#app-shell.presentation .stmt-row > .stmt-visual{
+  flex:1 1 0;min-width:280px;margin:0;
+}
+/* ...and the row's outboard padding is exactly the space the panel wants, so
+   a row carrying one gives it up. Rows without a panel keep the 6% inset —
+   that is what stops a bare card from stretching across the whole projector. */
+#app-shell.presentation .stmt-row.has-visual.agentA{padding-right:0;}
+#app-shell.presentation .stmt-row.has-visual.agentB{padding-left:0;}
+/* DOM order is card then figure, so only Agent B has to swap. */
+#app-shell.presentation .stmt-row.agentB > .stmt-visual{order:-1;}
+/* Only a row that actually carries a visible panel gives up card width.
+   Without this every visuals-off debate would present in a needlessly
+   narrow column. .has-visual is set by renderVisualPanel(). The 58% lands
+   the 28px body near the 62-66ch measure of §4 at projector widths, which
+   is why the body's max-width is left off — the card carries the measure,
+   so no dead parchment opens up beside a capped paragraph. */
+#app-shell.presentation .stmt-row.has-visual > .stmt{width:min(58%,100%);}
+/* Now that width is uncapped, the declared 3/2 would drive the height past
+   the bottom of a 16:9 projector. Capping the height lets the ratio break
+   (width still fills the row) and object-fit:cover crops instead of
+   overflowing, so a statement and its visual stay on one screen. The
+   placeholder is capped to match, or a pending panel would reserve a taller
+   box than the image that replaces it. */
+#app-shell.presentation .stmt-row > .stmt-visual img,
+#app-shell.presentation .stmt-row > .stmt-visual .stmt-visual-placeholder{max-height:72vh;}
+#app-shell.presentation .stmt-visual figcaption{font-size:18px;padding:12px 14px;}
+#app-shell.presentation .stmt-visual-note{font-size:17px;}
+
 @media (max-width:760px){
   .agent-cards-grid, .settings-grid{grid-template-columns:1fr;}
   .stmt-row.agentA, .stmt-row.agentB{padding-left:0;padding-right:0;}
+  /* No room beside the card at this width, presenting or not: the panel
+     wraps under it and both go full width. */
+  #app-shell.presentation .stmt-row{flex-wrap:wrap;row-gap:20px;}
+  #app-shell.presentation .stmt-row.has-visual > .stmt{width:100%;}
+  /* min-width is released with the basis: below 760px the row is narrower
+     than the 280px floor the wide layout uses to keep the panel legible. */
+  #app-shell.presentation .stmt-row > .stmt-visual,
+  #app-shell.presentation .stmt-row.agentB > .stmt-visual{flex:1 1 100%;order:0;min-width:0;}
 }
