@@ -458,6 +458,13 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 
 .begin-row{display:flex;justify-content:flex-end;align-items:center;gap:14px;margin-top:36px;padding-top:24px;border-top:1px solid var(--rule-hairline);flex-wrap:wrap;}
 .begin-note{font-family:var(--font-sans);font-size:12.5px;color:var(--ink-tertiary);margin-right:auto;}
+/* Names the prompt scenario the debate will run under. Borrows .state-pill.idle's
+   quiet treatment — this reports a setting, it does not compete with the CTA. */
+.scenario-pill{
+  font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:5px 10px;border-radius:3px;white-space:nowrap;
+  color:var(--ink-tertiary);border:1px solid var(--rule-hairline);background:transparent;
+}
 .btn-begin{padding:15px 30px;font-size:16px;letter-spacing:.02em;}
 
 .setup-error-banner{margin-bottom:20px;}
