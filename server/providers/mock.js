@@ -87,7 +87,8 @@ const DIRECTOR_MARKER = /you are the visual director/i;
 // length of the statement being illustrated — so a given turn always draws the
 // same figure, but a debate doesn't repeat one archetype for six turns.
 const DIRECTOR_TURNS = [
-  { archetype: 'comparison', prompt: 'Left column: the general claim the paper advertises. Right column: the single benchmark actually run. Bottom row shows the untested condition.', alt: 'A two-column chart comparing the claimed scope against the one condition actually tested.' },
+  { archetype: 'comparison', prompt: 'Left column: the authors’ definition of robustness. Right column: the definition the benchmark encodes. Rows contrast what each one counts as a failure.', alt: 'A two-column chart contrasting the paper’s definition of robustness against the benchmark’s.' },
+  { archetype: 'omission', prompt: 'Left column: the general claim the paper advertises. Right column: the single benchmark actually run. Bottom row shows the untested condition.', alt: 'A two-column chart comparing the claimed scope against the one condition actually tested.' },
   { archetype: 'magnitude', prompt: 'A tall bar for the reported gap between methods and a short bar for the run-to-run spread, with the noise floor crossing both.', alt: 'Two bars comparing the reported effect against the run-to-run noise floor.' },
   { archetype: 'causal', prompt: 'Method on the left, reported score on the right, joined by a crossed-out arrow; tuning effort sits above as the shared cause of both.', alt: 'A causal diagram showing tuning effort as a confounder behind the reported gap.' },
   { archetype: 'partition', prompt: 'A grid standing for every setting the claim covers, with the handful of seeds actually measured filled in one corner.', alt: 'A grid of settings with the small measured sample shaded in one corner.' },

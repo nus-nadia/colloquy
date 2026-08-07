@@ -19,7 +19,16 @@ import {
 const AUTO_ADVANCE_PAUSE_MS = 1500;
 
 // Turn-visual pipeline tuning.
-const VISUAL_DIRECTOR_MAX_TOKENS = 700; // call 1 returns a small JSON object
+// Call 1 returns a small JSON object — a few dozen tokens of visible output.
+// The budget is far larger than that because on a reasoning model this cap
+// covers reasoning tokens too (OpenAI's `max_completion_tokens` is the whole
+// completion, thinking included), and the director's default model is one.
+// At 700 the model would spend the budget thinking, emit the opening of a
+// perfectly well-formed object, and get cut off mid-string — which parses as
+// nothing and silently lands on the fallback archetype. Sized for the worst
+// case: truncation here is invisible in the UI, and the visible output this
+// caps is tiny, so there is nothing to be won by trimming it.
+const VISUAL_DIRECTOR_MAX_TOKENS = 4000;
 const VISUAL_STATEMENT_MAX_CHARS = 6000; // the director only needs the argument
 const VISUAL_IMAGE_SIZE = '1536x1024'; // 3:2 landscape, matches the style preamble
 // Sessions are never evicted (see CLAUDE.md), and image bytes are by far the
@@ -56,11 +65,19 @@ function wordTargetToMaxTokens(wordTarget) {
   return Math.min(4096, Math.max(512, Math.round(words * 8)));
 }
 
-// Parse the visual director's reply into { archetype, prompt, alt }.
+// Parse the visual director's reply into { archetype, prompt, alt, requested }.
 // Deliberately forgiving: a model that wraps its JSON in a code fence or adds
 // a sentence of preamble has still done the useful part of the job, and an
 // unusable reply degrades to the default archetype rather than failing the
 // whole visual. Returns null only when there is no object to be found at all.
+//
+// `requested` carries the archetype the model actually asked for, before the
+// coercion on the line below. Both degradations are silent to the user — the
+// image still renders, just under an archetype nothing chose — so the caller
+// compares the two and logs the difference. Without it, a director that never
+// returns a valid archetype looks exactly like one that keeps picking
+// `comparison`, and every visual quietly inherits that archetype's mandated
+// struck-through row.
 function parseDirectorReply(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return null;
@@ -81,6 +98,7 @@ function parseDirectorReply(raw) {
     archetype: Object.hasOwn(VISUAL_ARCHETYPES, archetype) ? archetype : DEFAULT_VISUAL_ARCHETYPE,
     prompt: String(parsed.prompt ?? '').trim().slice(0, VISUAL_PROMPT_MAX_CHARS),
     alt: String(parsed.alt ?? '').trim().slice(0, VISUAL_ALT_MAX_CHARS),
+    requested: archetype,
   };
 }
 
@@ -308,11 +326,38 @@ export class DebateSession {
         if (chunk) raw += chunk;
       }
 
-      const spec = parseDirectorReply(raw) ?? {
+      // Both fallbacks below still produce an image, so neither surfaces in the
+      // UI. Log them to the npm start terminal instead: an unparseable reply in
+      // particular sends the raw statement into the prompt as its own "subject"
+      // under an archetype the director never picked.
+      const parsedSpec = parseDirectorReply(raw);
+      if (!parsedSpec) {
+        console.warn(
+          `[visual turn ${entry.turn + 1}] director reply did not parse as JSON — falling back to ` +
+            `the "${DEFAULT_VISUAL_ARCHETYPE}" archetype with the raw statement as its subject. ` +
+            `Reply was: ${JSON.stringify(raw.slice(0, 300))}`,
+        );
+      } else if (parsedSpec.requested !== parsedSpec.archetype) {
+        const asked = parsedSpec.requested ? JSON.stringify(parsedSpec.requested) : '(no archetype field)';
+        console.warn(
+          `[visual turn ${entry.turn + 1}] director asked for archetype ${asked}, which is not in the ` +
+            `archetype list — falling back to "${parsedSpec.archetype}".`,
+        );
+      }
+
+      const spec = parsedSpec ?? {
         archetype: DEFAULT_VISUAL_ARCHETYPE,
         prompt: entry.text.slice(0, VISUAL_PROMPT_MAX_CHARS),
         alt: '',
       };
+
+      // The archetype the figure will actually be drawn under, logged for every
+      // visual and not just the degraded ones. The two warnings above only fire
+      // when something is broken, so a director that keeps *validly* choosing
+      // one archetype — and inheriting its mandated emphasis, e.g. the struck
+      // through bottom row that `comparison` always draws — is otherwise
+      // indistinguishable from a healthy spread.
+      console.log(`[visual turn ${entry.turn + 1}] archetype: ${spec.archetype}`);
 
       // Step 2 — the server composes the final prompt. Art direction and
       // composition are server-owned; the model only supplied the subject.
@@ -349,6 +394,7 @@ export class DebateSession {
     } catch (err) {
       entry.visual.status = 'failed';
       entry.visual.error = err?.message ? String(err.message).slice(0, 200) : 'Visual generation failed.';
+      console.warn(`[visual turn ${entry.turn + 1}] generation failed: ${entry.visual.error}`);
       this._broadcastVisual(entry);
     }
   }

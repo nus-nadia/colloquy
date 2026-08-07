@@ -101,7 +101,16 @@ export function moderatorInterjection(text) {
  * director model supplies the subject, these fix the form.
  */
 export const VISUAL_ARCHETYPES = {
+  // `comparison` and `omission` are deliberately two entries rather than one.
+  // A two-column chart is the right FORM for any straight contrast, but the
+  // struck-through row asserts something much stronger — that a specific case
+  // was claimed and never tested. Fused together, every contrast inherited
+  // that accusation, including statements merely contrasting two definitions.
+  // Splitting them makes the strikethrough a separate choice the director has
+  // to opt into, so a mis-picked form no longer smuggles in a claim.
   comparison:
+    'Composition: a two-column contrast chart filling the frame, the two columns separated by one thick vertical rule in the emphasis color. Each column is headed by a short label naming one of the two things being contrasted. Four aligned rows beneath the headings, each row a simple icon in the accent color paired with a very short label, so the columns can be read across, row by row. Both columns are complete: no row is struck through, crossed out, greyed out, or left empty.',
+  omission:
     'Composition: a two-column comparison chart filling the frame. The left column is headed by the scope the claim advertises, the right column by the scope actually tested. Four aligned rows beneath the headings, each row a simple icon paired with a very short label. The bottom row is present in the left column and drawn struck through with a single thick horizontal line in the emphasis color on the right — the thing that was claimed but never tested.',
   causal:
     'Composition: a causal diagram. Two large labelled nodes side by side, joined left to right by one thick arrow; that arrow is overlaid with a big X in the emphasis color. A third node sits centered above the pair, with two thin arrows dropping from it to both nodes below — the confounder that explains the association without the causal link.',
@@ -119,7 +128,10 @@ export const VISUAL_ARCHETYPES = {
     'Composition: one thick horizontal rule running the full width of the frame, with five evenly spaced tick marks rising from it. Small square markers sit on the four left ticks, filled in the accent color; the rightmost marker is drawn much larger and filled in the emphasis color. Short labels sit under the first and last markers only.',
 };
 
-/** Fallback when the director model returns an unknown or unparseable archetype. */
+// Fallback when the director model returns an unknown or unparseable archetype.
+// It must be the archetype that asserts the least, because nothing chose it:
+// a fallback that drew `omission`'s struck-through row would accuse the paper
+// of an untested claim on the strength of a JSON parse error.
 export const DEFAULT_VISUAL_ARCHETYPE = 'comparison';
 
 /** Hard caps on the director model's fields; also enforced server-side. */
@@ -192,17 +204,23 @@ export function buildVisualDirectorPrompt({ paperTitle }) {
   const ids = Object.keys(VISUAL_ARCHETYPES);
   return `You are the visual director for a live classroom debate about the paper "${paperTitle}". You are given one debater's statement. Your job is to design a single explanatory infographic that makes the *argumentative move* in that statement visible at a glance to an undergraduate sitting at the back of the room.
 
-Choose exactly one archetype, by id, from this list — pick the one whose move the statement actually makes:
-- comparison — what a claim advertises versus what was actually tested, and what is missing from the tested side.
-- causal — an association being read as causation, with the confounder that explains it instead.
-- flow — a multi-step pipeline whose conclusion depends on one weak link.
-- venn — a generalization reaching beyond the boundary of the evidence that supports it.
-- quadrant — a tradeoff dressed up as an outright win.
-- magnitude — an effect size measured against the noise it has to clear.
-- partition — a sample standing in for a population it does not represent.
-- timeline — a sequence of prior work, and where the novelty actually sits in it.
+Choose exactly one archetype, by id, from this list. Each carries a precondition — the material the statement has to supply for that picture to be drawable. An archetype whose precondition the statement does not meet is not available to you, however good the figure would look.
 
-Then write the SUBJECT of the picture: what the labelled parts stand for in this specific argument, in concrete nouns drawn from the statement. Do not describe colors, style, layout, or composition — those are fixed for you. Do not write full sentences of on-image text: the image may contain at most six words total, so name at most a few very short labels.
+- comparison — a straight contrast between two things: two definitions, two methods, two settings, two readings of the same result. Requires: both sides named in the statement, and at least one respect in which they differ.
+- omission — something was claimed, promised, or generalized, and a specific case was left untested or uncovered. Requires: both the claimed scope AND the particular missing case, named in the statement. If the statement contrasts two things without alleging that one was skipped, this is not the one.
+- causal — an association being read as causation, with the confounder that explains it instead. Requires: a named association AND a named third factor plausibly behind both.
+- flow — a multi-step pipeline whose conclusion depends on one weak link. Requires: three or more stages identifiable in the statement, AND which stage is the weak one.
+- venn — a generalization reaching beyond the boundary of the evidence supporting it. Requires: a broad claim AND a narrower evidence base that sits inside it.
+- quadrant — a tradeoff dressed up as an outright win. Requires: two desirable things in tension, AND a claim to have secured both.
+- magnitude — an effect size measured against the noise it has to clear. Requires: a reported effect AND something to size it against — variance, a baseline, run-to-run spread.
+- partition — a sample standing in for a population it does not represent. Requires: the population the claim covers AND the subset actually measured.
+- timeline — a sequence of prior work, and where the novelty actually sits in it. Requires: two or more prior results or stages in time, AND where this work falls among them.
+
+Two rules for choosing between them:
+- Do not stretch a statement to fit. If the precondition is not met, pick a different archetype.
+- If several preconditions are genuinely met, take the move the statement leads with — the one it spends most of its words on — rather than the most elaborate picture available. A plain contrast drawn as "comparison" is a better figure than a strained "causal", and an unhedged "comparison" is a better figure than an "omission" that has to invent the missing case. None of these is a fallback or a lesser choice; each is correct exactly when its precondition holds.
+
+Then write the SUBJECT of the picture: what the labelled parts stand for in this specific argument, in concrete nouns drawn from the statement. Do not describe colors, style, layout, or composition — those are fixed for you. Name one short label per part the composition calls for, each at most three words and each saying something different; never write a sentence that is meant to appear in the image.
 
 Reply with a single raw JSON object and nothing else. No prose before or after it, no explanation, no markdown code fence, no backticks.
 
