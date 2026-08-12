@@ -218,10 +218,17 @@ app.get('/api/debates/:id/visuals/:turn', (req, res) => {
 app.get('/api/debates/:id/transcript', (req, res) => {
   const session = getSessionOr404(req, res);
   if (!session) return;
-  const format = req.query.format === 'json' ? 'json' : 'md';
+  const requested = req.query.format;
+  const format = requested === 'json' || requested === 'html' ? requested : 'md';
   if (format === 'json') {
     res.setHeader('Content-Disposition', `attachment; filename="colloquy-${session.id}.json"`);
     res.json(session.exportJSON());
+  } else if (format === 'html') {
+    // Self-contained: image bytes are inlined here (and only here), so the
+    // saved file keeps its figures once it leaves the app.
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="colloquy-${session.id}.html"`);
+    res.send(session.exportHTML());
   } else {
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="colloquy-${session.id}.md"`);

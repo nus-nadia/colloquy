@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { getProvider } from './providers/index.js';
 import { getVisualProvider } from './visuals/index.js';
 import { getScenario } from './prompts/index.js';
+import { exportHTMLDocument } from './export-html.js';
 import {
   buildVisualDirectorPrompt,
   composeVisualPrompt,
@@ -550,6 +551,13 @@ export class DebateSession {
       }
     }
     return lines.join('\n');
+  }
+
+  // The counterpart to exportMarkdown for readers who want the figures: one
+  // self-contained .html file with the images inlined as data: URIs. Lives in
+  // its own module because it shares the frontend's markdown renderer.
+  exportHTML() {
+    return exportHTMLDocument(this);
   }
 
   exportJSON() {
