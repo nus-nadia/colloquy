@@ -32,13 +32,13 @@
     </div>
 
     <section class="setup-section">
-      <h2 class="setup-heading">The paper</h2>
+      <h2 class="setup-heading" id="source-heading">The paper</h2>
       <div class="field">
         <label class="field-label" for="paper-title">Title</label>
         <input class="field-input" type="text" id="paper-title" placeholder="e.g. Emergent Coordination in Decentralized Multi-Agent Systems">
       </div>
       <div class="field">
-        <label class="field-label" for="paper-text">Paper text</label>
+        <label class="field-label" for="paper-text" id="source-text-label">Paper text</label>
         <textarea class="field-input" id="paper-text" placeholder="Paste the abstract, or the full paper text, here..."></textarea>
         <p class="field-error hidden" id="paper-text-error">Paper text can't be empty.</p>
         <div class="load-file-row">
@@ -178,6 +178,7 @@
     </section>
 
     <div class="begin-row">
+      <span class="scenario-pill hidden" id="scenario-pill"></span>
       <span class="begin-note" id="begin-note">8 turns · auto-advance · standard length</span>
       <button type="submit" class="btn btn-primary btn-begin" id="begin-btn">Begin debate →</button>
     </div>
@@ -198,7 +199,7 @@
 
     <header class="stage-header">
       <div>
-        <p class="paper-kicker">Paper under debate</p>
+        <p class="paper-kicker" id="stage-kicker">Paper under debate</p>
         <h1 class="paper-title" id="stage-paper-title"></h1>
       </div>
       <div class="header-right">
@@ -236,11 +237,23 @@
         <button class="btn btn-quiet" id="end-btn" type="button">End debate</button>
       </div>
       <div class="controls-group">
-        <div class="control">
-          <button class="btn btn-secondary" id="download-btn" type="button">
+        <div class="control download-control">
+          <button class="btn btn-secondary" id="download-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="download-menu">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="M7 11l5 5 5-5"></path><path d="M5 19h14"></path></svg>
             Download transcript
+            <svg class="btn-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
           </button>
+          <!-- Opens upward: the controls bar is pinned to the bottom of the stage. -->
+          <div class="download-menu" id="download-menu" role="menu" hidden>
+            <button class="download-menu-item" type="button" role="menuitem" data-format="md">
+              <span class="download-menu-label">Markdown (.md)</span>
+              <span class="download-menu-hint">Text only — visuals become captions</span>
+            </button>
+            <button class="download-menu-item" type="button" role="menuitem" data-format="html">
+              <span class="download-menu-label">Web page (.html)</span>
+              <span class="download-menu-hint">Self-contained, with the generated images</span>
+            </button>
+          </div>
         </div>
         <div class="control">
           <button class="btn btn-secondary" id="presentation-btn" type="button">
@@ -276,6 +289,9 @@
 <!-- Must precede app.js: both are classic (non-deferred) scripts, so source
      order is the only guarantee that `katex` exists when app.js renders. -->
 <script src="vendor/katex/katex.min.js"></script>
-<script src="app.js"></script>
+<!-- app.js is a module so it can share public/render.js with the server's HTML
+     export. katex.min.js above stays a classic non-deferred script, so it has
+     always defined the global `katex` by the time this deferred module runs. -->
+<script type="module" src="app.js"></script>
 </body>
 </html>

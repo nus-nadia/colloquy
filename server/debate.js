@@ -3,18 +3,16 @@
 import { randomUUID } from 'node:crypto';
 import { getProvider } from './providers/index.js';
 import { getVisualProvider } from './visuals/index.js';
+import { getScenario } from './prompts/index.js';
+import { exportHTMLDocument } from './export-html.js';
 import {
-  buildSystemPrompt,
-  openingModeratorMessage,
-  finalRoundModeratorNote,
-  moderatorInterjection,
   buildVisualDirectorPrompt,
   composeVisualPrompt,
   VISUAL_ARCHETYPES,
   DEFAULT_VISUAL_ARCHETYPE,
   VISUAL_PROMPT_MAX_CHARS,
   VISUAL_ALT_MAX_CHARS,
-} from './prompts.js';
+} from './prompts/visuals.js';
 
 const AUTO_ADVANCE_PAUSE_MS = 1500;
 
@@ -105,7 +103,11 @@ function parseDirectorReply(raw) {
 export class DebateSession {
   constructor(config) {
     this.id = randomUUID();
-    this.config = config; // { paper, agents: [a,b], maxTurns, autoAdvance, wordTarget }
+    this.config = config; // { paper, agents: [a,b], maxTurns, autoAdvance, wordTarget, scenarioId }
+    // Resolved once per session, not per turn: the scenario cannot change
+    // mid-debate, and re-resolving inside runTurn() would let a config edit
+    // swap the prompt shape out from under a transcript already built on it.
+    this.scenario = getScenario(config.scenarioId);
     this.state = 'configured'; // configured | running | paused | finished
     this.transcript = []; // completed turns
     this.turn = 0; // index of the next turn to play
@@ -172,11 +174,11 @@ export class DebateSession {
     // reconstructed history starting (and, trivially, ending) with a
     // user role even once its own prior turns appear as `assistant`.
     if (speakerIndex === 0) {
-      messages.push({ role: 'user', content: openingModeratorMessage({ opponentName }) });
+      messages.push({ role: 'user', content: this.scenario.openingModeratorMessage({ opponentName }) });
     }
     for (const entry of this.transcript) {
       if (entry.type === 'moderator') {
-        messages.push({ role: 'user', content: moderatorInterjection(entry.text) });
+        messages.push({ role: 'user', content: this.scenario.moderatorInterjection(entry.text) });
       } else {
         messages.push({
           role: entry.agentIndex === speakerIndex ? 'assistant' : 'user',
@@ -191,7 +193,7 @@ export class DebateSession {
     const isFinalRound = turnIndex >= 1 && turnIndex >= this.config.maxTurns - 2;
     if (isFinalRound) {
       const last = merged[merged.length - 1];
-      last.content = `${last.content}\n\n${finalRoundModeratorNote()}`;
+      last.content = `${last.content}\n\n${this.scenario.finalRoundModeratorNote()}`;
     }
     return merged;
   }
@@ -224,7 +226,7 @@ export class DebateSession {
     });
 
     try {
-      const system = buildSystemPrompt({
+      const system = this.scenario.buildSystemPrompt({
         name: agent.name,
         opponentName: opponent.name,
         stance: agent.stance,
@@ -549,6 +551,13 @@ export class DebateSession {
       }
     }
     return lines.join('\n');
+  }
+
+  // The counterpart to exportMarkdown for readers who want the figures: one
+  // self-contained .html file with the images inlined as data: URIs. Lives in
+  // its own module because it shares the frontend's markdown renderer.
+  exportHTML() {
+    return exportHTMLDocument(this);
   }
 
   exportJSON() {

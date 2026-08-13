@@ -6,7 +6,7 @@ import express from 'express';
 import { listProviders, getProvider } from './providers/index.js';
 import { listVisualProviders, getVisualProvider } from './visuals/index.js';
 import { DebateSession } from './debate.js';
-import { STANCE_PRESETS } from './prompts.js';
+import { getScenario, listScenarios } from './prompts/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -38,10 +38,12 @@ app.get('/api/visual-providers', (req, res) => {
   res.json(listVisualProviders());
 });
 
-// The frontend's stance dropdown is built from this, so prompts.js stays
-// the single source of truth for preset ids, labels, and stance text.
-app.get('/api/stances', (req, res) => {
-  res.json(STANCE_PRESETS);
+// The whole scenario roster in one payload — each entry carries its own stance
+// presets and UI label overrides. server/prompts/ therefore stays the single
+// source of truth for preset ids, labels, and stance text, and the frontend can
+// switch scenarios without a second request. Replaces the old /api/stances.
+app.get('/api/scenarios', (req, res) => {
+  res.json(listScenarios());
 });
 
 app.post('/api/debates', (req, res) => {
@@ -103,8 +105,14 @@ app.post('/api/debates', (req, res) => {
     return res.status(400).json({ error: errors.join(' ') });
   }
 
+  // Deliberately lenient: an unknown scenarioId resolves to the default rather
+  // than 400ing. `?scenario=` is user-typed, and a typo should quietly give the
+  // original experience instead of blocking a class from starting.
+  const scenario = getScenario(body.scenarioId);
+
   const config = {
     paper: { title: paperTitle, text: paperText },
+    scenarioId: scenario.id,
     agents,
     maxTurns,
     autoAdvance: Boolean(body.autoAdvance),
@@ -210,10 +218,17 @@ app.get('/api/debates/:id/visuals/:turn', (req, res) => {
 app.get('/api/debates/:id/transcript', (req, res) => {
   const session = getSessionOr404(req, res);
   if (!session) return;
-  const format = req.query.format === 'json' ? 'json' : 'md';
+  const requested = req.query.format;
+  const format = requested === 'json' || requested === 'html' ? requested : 'md';
   if (format === 'json') {
     res.setHeader('Content-Disposition', `attachment; filename="colloquy-${session.id}.json"`);
     res.json(session.exportJSON());
+  } else if (format === 'html') {
+    // Self-contained: image bytes are inlined here (and only here), so the
+    // saved file keeps its figures once it leaves the app.
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="colloquy-${session.id}.html"`);
+    res.send(session.exportHTML());
   } else {
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="colloquy-${session.id}.md"`);

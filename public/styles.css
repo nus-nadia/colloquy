@@ -388,6 +388,28 @@ button{font:inherit;}
 .btn-quiet{background:transparent;color:var(--state-error-700);border:none;padding:10px 6px;text-decoration:none;}
 .btn-quiet:hover{text-decoration:underline;}
 
+/* ---------- Download menu ----------
+   Anchored above its button: the controls bar is sticky to the bottom of the
+   viewport, so a menu dropping downward would be off-screen. */
+.download-control{position:relative;}
+.download-control .btn-caret{width:13px;height:13px;margin-left:-2px;color:var(--ink-tertiary);}
+#download-btn.is-open{background:var(--bg-sunken);}
+.download-menu{
+  position:absolute;bottom:calc(100% + 8px);right:0;z-index:20;min-width:270px;
+  display:flex;flex-direction:column;padding:5px;
+  background:var(--bg-surface);border:1px solid var(--rule-strong);border-radius:3px;
+  box-shadow:0 8px 22px rgba(33,28,21,.18);
+}
+.download-menu[hidden]{display:none;}
+.download-menu-item{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  padding:9px 11px;border:none;border-radius:2px;background:transparent;
+  font-family:var(--font-sans);text-align:left;cursor:pointer;
+}
+.download-menu-item:hover,.download-menu-item:focus-visible{background:var(--bg-sunken);}
+.download-menu-label{font-size:13.5px;font-weight:600;color:var(--ink-primary);}
+.download-menu-hint{font-size:11.5px;color:var(--ink-tertiary);}
+
 /* ---------- Confirmation dialog ---------- */
 .confirm-dialog{
   border:1px solid var(--rule-strong);border-radius:3px;padding:0;
@@ -458,6 +480,13 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 
 .begin-row{display:flex;justify-content:flex-end;align-items:center;gap:14px;margin-top:36px;padding-top:24px;border-top:1px solid var(--rule-hairline);flex-wrap:wrap;}
 .begin-note{font-family:var(--font-sans);font-size:12.5px;color:var(--ink-tertiary);margin-right:auto;}
+/* Names the prompt scenario the debate will run under. Borrows .state-pill.idle's
+   quiet treatment — this reports a setting, it does not compete with the CTA. */
+.scenario-pill{
+  font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:5px 10px;border-radius:3px;white-space:nowrap;
+  color:var(--ink-tertiary);border:1px solid var(--rule-hairline);background:transparent;
+}
 .btn-begin{padding:15px 30px;font-size:16px;letter-spacing:.02em;}
 
 .setup-error-banner{margin-bottom:20px;}
