@@ -529,12 +529,22 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 
    Two things make this work and must stay: the row's align-items:flex-start
    (a stretched flex item is as tall as its container and can never stick),
-   and the 72vh image cap below plus this top inset keeping the whole figure
-   shorter than the viewport — a sticky box taller than the screen pins its
-   top and hides its own bottom, which is the caption. */
+   and the max-height here keeping the whole figure shorter than the viewport
+   — a sticky box taller than the screen pins its top and hides its own
+   bottom, which is the caption.
+
+   That max-height is on the FIGURE, not just the image, and the figure is a
+   flex column so the image is the part that gives way. The caption is
+   flex:0 0 auto and the image flex:0 1 auto with min-height:0, so a caption
+   that wraps to five lines shrinks the picture rather than pushing itself off
+   the bottom of the screen. Capping only the image cannot do this: image cap
+   plus caption height is a sum nothing bounds, and the caption is exactly the
+   part that overflows. object-fit:cover means the shrunk image crops instead
+   of distorting. */
 #app-shell.presentation .stmt-row > .stmt-visual{
   flex:1 1 0;min-width:280px;margin:0;
   position:sticky;top:3vh;align-self:flex-start;
+  display:flex;flex-direction:column;max-height:94vh;
 }
 /* ...and the row's outboard padding is exactly the space the panel wants, so
    a row carrying one gives it up. Rows without a panel keep the 6% inset —
@@ -555,10 +565,16 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
    (width still fills the row) and object-fit:cover crops instead of
    overflowing, so a statement and its visual stay on one screen. The
    placeholder is capped to match, or a pending panel would reserve a taller
-   box than the image that replaces it. */
+   box than the image that replaces it. min-height:0 + flex:0 1 auto is what
+   lets the figure's own max-height shrink these below 72vh when the caption
+   under them is tall; without it a flex item refuses to go under its content
+   height and the caption is pushed off screen again. */
 #app-shell.presentation .stmt-row > .stmt-visual img,
-#app-shell.presentation .stmt-row > .stmt-visual .stmt-visual-placeholder{max-height:72vh;}
-#app-shell.presentation .stmt-visual figcaption{font-size:18px;padding:12px 14px;}
+#app-shell.presentation .stmt-row > .stmt-visual .stmt-visual-placeholder{
+  max-height:72vh;min-height:0;flex:0 1 auto;
+}
+/* The caption never yields: it is the part the image gives way for. */
+#app-shell.presentation .stmt-visual figcaption{font-size:18px;padding:12px 14px;flex:0 0 auto;}
 #app-shell.presentation .stmt-visual-note{font-size:17px;}
 
 @media (max-width:760px){

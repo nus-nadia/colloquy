@@ -65,7 +65,38 @@ function wordTargetToMaxTokens(wordTarget) {
   return Math.min(4096, Math.max(512, Math.round(words * 8)));
 }
 
-// Parse the visual director's reply into { archetype, prompt, alt, requested }.
+// Trim `text` to at most `max` characters without cutting a word in half.
+//
+// The caps in prompts.js are runaway guards rather than the length the model
+// was asked for — see VISUAL_ALT_MAX_CHARS — so this should fire on almost no
+// real turns, and a caption that merely runs long displays in full. When it
+// does fire, the result has to read as a deliberate trim: a bare slice()
+// chopped the caption mid-word, which from the back of a lecture hall looks
+// exactly like a broken feature.
+//
+// `sentenceFirst` is for the image prompt, where half a sentence is worse than
+// a short one: a severed label instruction gets drawn into the figure as a
+// fragment. It falls back to the word boundary, and that to a hard cut, rather
+// than returning something far shorter than the caller asked for.
+function clampText(text, max, { sentenceFirst = false } = {}) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  if (sentenceFirst) {
+    const stop = Math.max(
+      cut.lastIndexOf('. '),
+      cut.lastIndexOf('; '),
+      cut.lastIndexOf('! '),
+      cut.lastIndexOf('? '),
+    );
+    if (stop > max * 0.5) return cut.slice(0, stop + 1);
+  }
+  const space = cut.lastIndexOf(' ');
+  const body = space > max * 0.6 ? cut.slice(0, space) : cut;
+  return `${body.replace(/[\s.,;:—-]+$/, '')}…`;
+}
+
+// Parse the visual director's reply into
+// { archetype, prompt, alt, requested, trimmed }.
 // Deliberately forgiving: a model that wraps its JSON in a code fence or adds
 // a sentence of preamble has still done the useful part of the job, and an
 // unusable reply degrades to the default archetype rather than failing the
@@ -78,6 +109,11 @@ function wordTargetToMaxTokens(wordTarget) {
 // returns a valid archetype looks exactly like one that keeps picking
 // `comparison`, and every visual quietly inherits that archetype's mandated
 // struck-through row.
+//
+// `trimmed` names the fields clampText() had to shorten, for the same reason:
+// an over-length reply is invisible in the UI apart from an ellipsis on the
+// caption, so the caller logs it. A cap that fires on most turns is a sign the
+// prompt and the cap have drifted apart, not that the model is misbehaving.
 function parseDirectorReply(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return null;
@@ -94,11 +130,19 @@ function parseDirectorReply(raw) {
   }
   if (!parsed || typeof parsed !== 'object') return null;
   const archetype = typeof parsed.archetype === 'string' ? parsed.archetype.trim().toLowerCase() : '';
+  const rawPrompt = String(parsed.prompt ?? '').trim();
+  const rawAlt = String(parsed.alt ?? '').trim();
+  const prompt = clampText(rawPrompt, VISUAL_PROMPT_MAX_CHARS, { sentenceFirst: true });
+  const alt = clampText(rawAlt, VISUAL_ALT_MAX_CHARS);
+  const trimmed = [];
+  if (prompt !== rawPrompt) trimmed.push(`prompt (${rawPrompt.length} chars, cap ${VISUAL_PROMPT_MAX_CHARS})`);
+  if (alt !== rawAlt) trimmed.push(`alt (${rawAlt.length} chars, cap ${VISUAL_ALT_MAX_CHARS})`);
   return {
     archetype: Object.hasOwn(VISUAL_ARCHETYPES, archetype) ? archetype : DEFAULT_VISUAL_ARCHETYPE,
-    prompt: String(parsed.prompt ?? '').trim().slice(0, VISUAL_PROMPT_MAX_CHARS),
-    alt: String(parsed.alt ?? '').trim().slice(0, VISUAL_ALT_MAX_CHARS),
+    prompt,
+    alt,
     requested: archetype,
+    trimmed,
   };
 }
 
@@ -344,10 +388,20 @@ export class DebateSession {
             `archetype list — falling back to "${parsedSpec.archetype}".`,
         );
       }
+      // Orthogonal to the two above, so not part of that chain: a reply can
+      // parse perfectly, name a valid archetype, and still run long.
+      if (parsedSpec?.trimmed.length) {
+        console.warn(
+          `[visual turn ${entry.turn + 1}] director reply ran far past its runaway guard — trimmed ` +
+            `${parsedSpec.trimmed.join(' and ')} at a word boundary. The caption shows an ellipsis. ` +
+            `These guards sit well above the length the prompt asks for, so this should be rare; ` +
+            `if it fires regularly the director is ignoring the requested format.`,
+        );
+      }
 
       const spec = parsedSpec ?? {
         archetype: DEFAULT_VISUAL_ARCHETYPE,
-        prompt: entry.text.slice(0, VISUAL_PROMPT_MAX_CHARS),
+        prompt: clampText(entry.text, VISUAL_PROMPT_MAX_CHARS, { sentenceFirst: true }),
         alt: '',
       };
 

@@ -134,9 +134,23 @@ export const VISUAL_ARCHETYPES = {
 // of an untested claim on the strength of a JSON parse error.
 export const DEFAULT_VISUAL_ARCHETYPE = 'comparison';
 
-/** Hard caps on the director model's fields; also enforced server-side. */
+/**
+ * Backstops on the director model's fields, enforced in parseDirectorReply().
+ *
+ * VISUAL_ALT_MAX_CHARS is a runaway guard, NOT the length being asked for, and
+ * the gap between the two is the whole point. Models count words well and
+ * characters badly, so the prompt asks for the caption in words
+ * (VISUAL_ALT_MAX_WORDS) and quotes no character number at all; the cap here
+ * is set far above what that ask produces — 18 words of ordinary prose runs
+ * ~110-130 characters — so a reply that merely overshoots the word count still
+ * displays in full. Only a director that ignored the format outright and wrote
+ * a paragraph gets trimmed. Every trim is visible on the projector as an
+ * ellipsis, so the cap should fire on approximately no real turns; tightening
+ * it toward the word count is how this feature was broken the first time.
+ */
 export const VISUAL_PROMPT_MAX_CHARS = 600;
-export const VISUAL_ALT_MAX_CHARS = 120;
+export const VISUAL_ALT_MAX_CHARS = 320;
+export const VISUAL_ALT_MAX_WORDS = 18;
 
 // Agent hues, copied from design/DESIGN_SPEC.md §2 (`--agentA-600` /
 // `--agentB-600`). The image never picks its own colors — one accent per
@@ -224,5 +238,5 @@ Then write the SUBJECT of the picture: what the labelled parts stand for in this
 
 Reply with a single raw JSON object and nothing else. No prose before or after it, no explanation, no markdown code fence, no backticks.
 
-{"archetype": "<one of: ${ids.join(', ')}>", "prompt": "<the subject, at most ${VISUAL_PROMPT_MAX_CHARS} characters>", "alt": "<one plain-language sentence describing the finished figure for a screen reader, at most ${VISUAL_ALT_MAX_CHARS} characters>"}`;
+{"archetype": "<one of: ${ids.join(', ')}>", "prompt": "<the subject, at most ${VISUAL_PROMPT_MAX_CHARS} characters>", "alt": "<one plain-language sentence describing the finished figure for a screen reader, at most ${VISUAL_ALT_MAX_WORDS} words>"}`;
 }
