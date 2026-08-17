@@ -547,9 +547,23 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 #app-shell.presentation .stmt-row{align-items:flex-start;column-gap:32px;}
 /* The panel takes ALL the width the card leaves, rather than a capped slice:
    flex-basis 0 + grow means "the rest of the row", so the image runs out to
-   the transcript's own 5% page gutter. */
+   the transcript's own 5% page gutter.
+
+   It also sticks to the viewport for as long as its own row is on screen.
+   A 28px body runs far taller than the image beside it, so scrolling through
+   a long statement would otherwise carry the visual off the top of the
+   projector and leave the room reading against blank parchment. Sticky keeps
+   the figure in view and releases it at the row's bottom edge, so it hands
+   over to the next statement's panel rather than overlapping it.
+
+   Two things make this work and must stay: the row's align-items:flex-start
+   (a stretched flex item is as tall as its container and can never stick),
+   and the 72vh image cap below plus this top inset keeping the whole figure
+   shorter than the viewport — a sticky box taller than the screen pins its
+   top and hides its own bottom, which is the caption. */
 #app-shell.presentation .stmt-row > .stmt-visual{
   flex:1 1 0;min-width:280px;margin:0;
+  position:sticky;top:3vh;align-self:flex-start;
 }
 /* ...and the row's outboard padding is exactly the space the panel wants, so
    a row carrying one gives it up. Rows without a panel keep the 6% inset —
@@ -584,7 +598,9 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
   #app-shell.presentation .stmt-row{flex-wrap:wrap;row-gap:20px;}
   #app-shell.presentation .stmt-row.has-visual > .stmt{width:100%;}
   /* min-width is released with the basis: below 760px the row is narrower
-     than the 280px floor the wide layout uses to keep the panel legible. */
+     than the 280px floor the wide layout uses to keep the panel legible.
+     Sticky is released with it: wrapped under the card the panel is the last
+     thing in the row, so there is nothing left to scroll past it. */
   #app-shell.presentation .stmt-row > .stmt-visual,
-  #app-shell.presentation .stmt-row.agentB > .stmt-visual{flex:1 1 100%;order:0;min-width:0;}
+  #app-shell.presentation .stmt-row.agentB > .stmt-visual{flex:1 1 100%;order:0;min-width:0;position:static;}
 }
