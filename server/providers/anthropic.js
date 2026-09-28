@@ -14,7 +14,7 @@ let client;
 export default {
   id: 'anthropic',
   label: 'Claude (Anthropic)',
-  defaultModel: 'claude-opus-4-8',
+  defaultModel: 'claude-opus-5-5',
 
   isConfigured() {
     return Boolean(process.env.ANTHROPIC_API_KEY);

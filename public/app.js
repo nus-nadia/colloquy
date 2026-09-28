@@ -323,7 +323,7 @@ function populateVisualProviderSelect() {
 // different kinds of model. The image model is the visual adapter's own
 // defaultModel. The director, though, runs over the *text*-provider contract
 // (see _generateVisual() in server/debate.js), so it defaults to the text
-// adapter of the same vendor — openai -> gpt-5.6-luna, not gpt-image-2. It
+// adapter of the same vendor — openai -> gpt-6-sol, not gpt-image-2. It
 // falls back to the visual adapter's default only for a vendor that has no
 // text adapter, which would otherwise leave the field empty.
 function applyVisualProviderDefaults() {
