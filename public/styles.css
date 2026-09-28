@@ -558,12 +558,17 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
 
    Two things make this work and must stay: the row's align-items:flex-start
    (a stretched flex item is as tall as its container and can never stick),
-   and the 72vh image cap below plus this top inset keeping the whole figure
-   shorter than the viewport — a sticky box taller than the screen pins its
-   top and hides its own bottom, which is the caption. */
+   and the max-height on the figure itself plus this top inset keeping the
+   whole figure shorter than the viewport — a sticky box taller than the
+   screen pins its top and hides its own bottom, which is the caption. */
 #app-shell.presentation .stmt-row > .stmt-visual{
   flex:1 1 0;min-width:280px;margin:0;
   position:sticky;top:3vh;align-self:flex-start;
+  /* The figure bounds itself, not just its image: caption length is the
+     model's to choose, so image height + caption height is a sum nothing
+     else bounds. This column is what lets the image be the part that
+     yields — see the flex rules on the image and the caption below. */
+  display:flex;flex-direction:column;max-height:94vh;
 }
 /* ...and the row's outboard padding is exactly the space the panel wants, so
    a row carrying one gives it up. Rows without a panel keep the 6% inset —
@@ -586,8 +591,12 @@ textarea.field-input{font-family:var(--font-serif);font-size:16px;line-height:1.
    placeholder is capped to match, or a pending panel would reserve a taller
    box than the image that replaces it. */
 #app-shell.presentation .stmt-row > .stmt-visual img,
-#app-shell.presentation .stmt-row > .stmt-visual .stmt-visual-placeholder{max-height:72vh;}
-#app-shell.presentation .stmt-visual figcaption{font-size:18px;padding:12px 14px;}
+#app-shell.presentation .stmt-row > .stmt-visual .stmt-visual-placeholder{max-height:72vh;min-height:0;flex:0 1 auto;}
+/* min-height:0 + flex:0 1 auto above is load-bearing: without it a flex item
+   refuses to shrink below its content height and the caption is pushed off
+   the bottom of the sticky box again. object-fit:cover is already set, so a
+   shrunk image crops rather than distorts. The caption never yields. */
+#app-shell.presentation .stmt-visual figcaption{font-size:18px;padding:12px 14px;flex:0 0 auto;}
 #app-shell.presentation .stmt-visual-note{font-size:17px;}
 
 @media (max-width:760px){
