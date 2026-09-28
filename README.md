@@ -118,8 +118,8 @@ Register it in `server/visuals/index.js` and it appears in `GET /api/visual-prov
 
 ## Notes on the included adapters
 
-- **Anthropic** (`server/providers/anthropic.js`) uses `@anthropic-ai/sdk`'s `client.messages.stream`, defaults to model `claude-opus-4-8`, and passes `thinking: { type: 'adaptive' }`. It deliberately never sends `temperature`, `top_p`, or `top_k` — current Claude models reject those with a 400 error on this endpoint.
-- **OpenAI** (`server/providers/openai.js`) uses chat completions with `stream: true` and `max_completion_tokens` (newer models reject the legacy `max_tokens`). Default model `gpt-5.6-luna` — edit the model field in the UI if your org uses a different name.
+- **Anthropic** (`server/providers/anthropic.js`) uses `@anthropic-ai/sdk`'s `client.messages.stream`, defaults to model `claude-opus-5-5`, and passes `thinking: { type: 'adaptive' }`. It deliberately never sends `temperature`, `top_p`, or `top_k` — current Claude models reject those with a 400 error on this endpoint.
+- **OpenAI** (`server/providers/openai.js`) uses chat completions with `stream: true` and `max_completion_tokens` (newer models reject the legacy `max_tokens`). Default model `gpt-6-sol` — edit the model field in the UI if your org uses a different name.
 - **Google** (`server/providers/google.js`) uses `@google/genai`'s `client.models.generateContentStream`, default model `gemini-3.6-flash`.
 - **Mock** (`server/providers/mock.js`) needs no key, ships two six-turn canned debate scripts, and streams word-by-word — the offline demo and test path described above.
 
