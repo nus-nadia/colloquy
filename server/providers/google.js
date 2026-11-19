@@ -13,7 +13,7 @@ let client;
 export default {
   id: 'google',
   label: 'Gemini (Google)',
-  defaultModel: 'gemini-3.6-flash',
+  defaultModel: 'gemini-4-hydrogen',
 
   isConfigured() {
     return Boolean(process.env.GEMINI_API_KEY);
